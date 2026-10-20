@@ -32,37 +32,85 @@ and viewing layer that sits on top of cameras the user already owns.
 
 In scope for the initial build:
 
-1. Account registration/login, single-tenant-per-org model (org = tenant).
+1. Account registration/login, single-tenant-per-org model (org = tenant). **Done.**
 2. Camera CRUD: add a camera by RTSP URL (+ optional ONVIF endpoint), test connection,
-   store capability record.
+   store capability record. **Done.**
 3. RTSP connector: connect, probe stream (codec/resolution/fps via ffprobe), report
    capabilities honestly (most RTSP-only cameras report `liveView`, `cloudRecording`,
    `playback` true and `ptz`/`motionEvents`/`imageSettings` false unless ONVIF confirms
-   otherwise).
+   otherwise). **Done** — `POST /cameras/:id/test-connection`, see
+   docs/camera-integration.md. Stream-copy recording itself (item 6 below) is separate
+   and not yet built — this only probes and reports, it doesn't record.
 4. ONVIF connector (best-effort): device discovery on LAN (WS-Discovery), capability
    fetch (profiles, PTZ presence) where the device answers ONVIF correctly. Falls back
-   to RTSP-only capability set when ONVIF probing fails or times out.
+   to RTSP-only capability set when ONVIF probing fails or times out. **Partially
+   done**: discovery (`POST /cameras/discover`) is implemented and real, with the
+   documented LAN-only limitation (docs/camera-integration.md). Capability fetch
+   beyond discovery (profiles, PTZ presence) is not implemented — an ONVIF camera
+   always lands on `CONNECTED_MISSING_CAPABILITIES` once its RTSP stream is confirmed.
 5. Simulated connector: for dev/CI, serves a looping local test video over RTSP
-   (via an ffmpeg-fed `rtsp-simple-server`/`mediamtx` container) so the full pipeline
-   can be exercised with zero physical hardware.
-6. Recording pipeline: ffmpeg stream-copy ingestion, fixed-duration segments, segment
-   upload to S3-compatible storage (MinIO locally), metadata row per segment.
+   (via an ffmpeg-fed MediaMTX container) so the full pipeline can be exercised with
+   zero physical hardware. **Done** — see `docker-compose.yml`'s `mediamtx` +
+   `simulated-camera` services.
+6. Recording pipeline: stream-copy ingestion, fixed-duration segments, segment
+   upload to S3-compatible storage, metadata row per segment. **Done** — via
+   MediaMTX (not a hand-rolled ffmpeg process) doing the actual stream-copy
+   segmentation, with a background worker uploading completed segments to
+   LocalStack/S3. See docs/video-recording.md, including a real
+   duration-accuracy bug found and fixed during verification.
 7. Playback: list segments for a camera/date, generate short-lived signed GET URLs,
    play in browser `<video>` tag (MP4 segment playback for MVP; HLS is a stated
-   stretch goal once multi-segment continuous playback is needed).
+   stretch goal once multi-segment continuous playback is needed). **Done** —
+   see docs/playback.md.
 8. Retention: per-camera retention policy (7/30/90 days), a scheduled job that expires
    segments past retention and deletes the backing object only after the DB row is
-   marked `expired`.
+   marked `expired`. **Done** — see docs/retention-and-storage.md.
 9. Storage quota: per-tenant storage quota tracked from actual uploaded segment sizes,
-   enforced before new recording jobs start.
+   enforced before new recording jobs start. **Partially done**: storage usage is
+   tracked and reported from real segment sizes (`GET /storage/usage`); there is no
+   quota *limit* or enforcement yet — that depends on the subscription layer (Phase 8).
 10. Dashboard: Overview, Cameras, Live View (MJPEG/snapshot or short RTSP-over-WS
     preview — real live view is a Phase 4+ item, not claimed before it works),
-    Recordings, Storage, Settings.
+    Recordings, Storage, Settings, Alerts (notifications list with unread
+    badge). **Done.**
+11. Notifications/monitoring: camera-offline and recording-stopped detection,
+    upload-failure and retention-cleanup-failure alerts, storage-quota
+    warnings, with per-(tenant, type, target) cooldowns to avoid alert
+    storms. **Done** — in-app notification list only, no email/SMS/webhook
+    delivery; see docs/monitoring-and-alerts.md.
+12. Security review of the full codebase built so far, per this project's
+    own rule against claiming untested security properties. **Done** — found
+    and fixed two real vulnerabilities (an SSRF guard bypass, an
+    unauthenticated internal API bound to all interfaces); see
+    docs/security.md. A one-time pass, not a continuous control — re-review
+    follows substantial changes to auth/network-boundary code.
+13. Failure recovery: the system should survive a real Postgres/Redis/
+    MediaMTX outage without crashing and should self-heal once the
+    dependency returns. **Done** — verified by actually stopping each
+    dependency against a running server, not assumed. Found and fixed two
+    real bugs doing this (a DB/Redis error could crash the entire API
+    process; `/ready` could take 27.7s to notice a dropped Redis
+    connection) and confirmed all three dependencies self-heal with no
+    server restart; see docs/failure-recovery.md.
+14. Optimize resource consumption. **Done** — measured real process memory
+    against the actual running dev stack (not estimated), found and fixed
+    one genuine inefficiency (the camera health check made one MediaMTX
+    HTTP call per actively-recording camera instead of one bulk call
+    total), and re-verified the health-check behavior end-to-end afterward
+    to confirm nothing regressed; see docs/deployment.md's "Resource
+    consumption" section.
 
 Explicitly **out of scope for MVP** (tracked as later phases, not promised now):
 PTZ control, motion-event ingestion, manufacturer proprietary SDKs (Wi-Fi-only
-cameras), mobile apps, real billing provider integration, multi-location
-hierarchies beyond a single `Location` table existing in the schema.
+cameras), mobile apps, multi-location hierarchies beyond a single `Location`
+table existing in the schema.
+
+**Subscriptions/billing**: the billing-provider *abstraction*, quota
+enforcement (camera limit, storage quota, retention limit), and a
+simulated/dev billing adapter are implemented — see
+docs/subscriptions-and-billing.md. A **real** payment provider integration
+is still out of scope; the dev adapter is explicitly never presented as a
+real transaction.
 
 ## 4. Definition of "done" for any feature in this project
 

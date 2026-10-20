@@ -72,9 +72,54 @@ services:
       - >
         aws --endpoint-url=http://s3:4566 s3 mb s3://${STORAGE_BUCKET:-cctv-recordings} || true
 
+  # RTSP/WebRTC/HLS media server (MIT license — see docs/foundation-assessment.md).
+  # This is the real target for camera connection-testing/capability-detection
+  # work and, later, the recording pipeline. It does not simulate a camera by
+  # itself — `simulated-camera` below publishes a synthetic stream into it.
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    restart: unless-stopped
+    volumes:
+      - ./infra/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - mediamtx-recordings:/recordings
+    ports:
+      # Bound to 127.0.0.1 explicitly, not just "HOST:CONTAINER" — that
+      # short syntax binds to 0.0.0.0 (all interfaces) by default, which
+      # would make MediaMTX's unauthenticated config/playback APIs
+      # (infra/mediamtx/mediamtx.yml's dev-only auth bypass) reachable from
+      # anywhere on the LAN, not just this machine as that file assumes.
+      # Every current consumer (apps/api, the worker, manual testing) runs
+      # on this host, so loopback-only doesn't break anything.
+      - "127.0.0.1:8554:8554" # RTSP
+      - "127.0.0.1:8889:8889" # WebRTC (unused yet, reserved for live view)
+      - "127.0.0.1:9997:9997" # config API — apps/api uses this to add/remove per-camera recording paths
+      - "127.0.0.1:9996:9996" # playback API — apps/api fetches completed segments over HTTP from here
+
+  # Publishes a synthetic, infinitely-looping test-pattern video into MediaTMX
+  # over RTSP, standing in for a physical camera. This is what the
+  # `SIMULATED` connector type points at — labeled as simulated everywhere it
+  # appears in the API/UI, never presented as a real camera. Lets connection
+  # testing and capability detection be exercised and verified for real with
+  # zero physical hardware (see docs/requirements.md §3, item 5).
+  simulated-camera:
+    image: jrottenberg/ffmpeg:6-alpine
+    restart: unless-stopped
+    depends_on:
+      - mediamtx
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        sleep 3 &&
+        ffmpeg -re -f lavfi -i "testsrc=size=1280x720:rate=15"
+        -f lavfi -i "sine=frequency=440"
+        -c:v libx264 -preset ultrafast -tune zerolatency -g 30
+        -c:a aac -ar 44100
+        -f rtsp rtsp://mediamtx:8554/simulated
+
 volumes:
   postgres-data:
   localstack-data:
+  mediamtx-recordings:
 
 # apps/api and apps/web are run locally with `pnpm dev:api` / `pnpm dev:web`
 # against these services for now (see README.md). Containerizing the app

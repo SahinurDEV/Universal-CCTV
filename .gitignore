@@ -12,3 +12,4 @@ storage-data/
 minio-data/
 postgres-data/
 tmp/
+*.tsbuildinfo

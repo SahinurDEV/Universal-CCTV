@@ -83,6 +83,42 @@ surface, not written speculatively ahead of the code.
 - Verified by integration tests for both the loopback and metadata-address
   cases.
 
+### Real vulnerability found and fixed: the guard was fully bypassable
+
+A dedicated security-review pass (two independent sub-agent review +
+verification passes, following the `security-review` skill's methodology)
+found that `connectorType: "SIMULATED"` skipped `assertSafeCameraHost`
+entirely, with no check that `host` was actually the known dev fixture
+address. Since `host`/`connectorType` are independent request fields, any
+authenticated tenant member could create a camera with
+`{connectorType: "SIMULATED", host: "169.254.169.254"}` and the guard would
+never run — then `test-connection` or `recording/start` would make the
+server (and MediaMTX) actually dial that address. **Fixed**: `SIMULATED`
+cameras are now pinned to the literal host `"localhost"` — anything else is
+rejected with the same `unsafe_host` error, in both the create and update
+routes (`routes/cameras.ts`). Verified: the exploit payload now returns 400,
+and the real simulated-camera flow still works. A regression test exists
+for both (`cameras.integration.test.ts`).
+
+## MediaMTX network exposure
+
+- `infra/mediamtx/mediamtx.yml` intentionally disables auth on MediaMTX's
+  config (9997) and playback (9996) APIs for local dev, on the stated
+  assumption that "this port isn't exposed beyond this dev machine."
+- **Real gap found and fixed**: `docker-compose.yml` published these ports
+  (plus RTSP 8554 and WebRTC 8889) with bare `"HOST:CONTAINER"` syntax,
+  which Docker binds to `0.0.0.0` by default — actually reachable from any
+  network-adjacent host, contradicting the stated assumption. Anyone on the
+  same LAN could have hit the playback API directly to pull any tenant's
+  footage, bypassing the app's own auth entirely, or used the config API to
+  tamper with recording paths. **Fixed**: all four ports now bind
+  explicitly to `127.0.0.1`. Verified: `Get-NetTCPConnection` confirms
+  loopback-only binding, and the config API/RTSP publish/playback all still
+  work from the host itself (every real consumer runs on this host).
+- This is still a local-dev mitigation, not a production one — before any
+  real deployment, MediaMTX needs real `authInternalUsers` credentials, not
+  just loopback binding (see docs/deployment.md's MediaMTX hardening note).
+
 ## Transport and headers
 
 - `helmet()` applied for standard security headers (CSP, HSTS,

@@ -86,6 +86,7 @@ export interface Camera {
   port: number;
   onvifPort: number | null;
   locationId: string | null;
+  retentionPolicyId: string | null;
   createdAt: string;
   updatedAt: string;
   hasCredential: boolean;
@@ -114,6 +115,179 @@ export function createCamera(input: CreateCameraInput) {
   return apiFetch<Camera>("/cameras", { method: "POST", body: JSON.stringify(input) });
 }
 
+export function updateCameraRetentionPolicy(id: string, retentionPolicyId: string) {
+  return apiFetch<Camera>(`/cameras/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ retentionPolicyId }),
+  });
+}
+
+export interface RetentionPolicy {
+  id: string;
+  name: string;
+  retentionDays: number;
+  isDefault: boolean;
+}
+
+export function listRetentionPolicies() {
+  return apiFetch<{ policies: RetentionPolicy[] }>("/retention-policies");
+}
+
+export interface StorageUsage {
+  totalBytes: string;
+  byCamera: Array<{ cameraId: string; cameraName: string; bytes: string; segmentCount: number }>;
+}
+
+export function getStorageUsage() {
+  return apiFetch<StorageUsage>("/storage/usage");
+}
+
 export function deleteCamera(id: string) {
   return apiFetch<void>(`/cameras/${id}`, { method: "DELETE" });
+}
+
+export interface TestConnectionResult {
+  ok: boolean;
+  supportTier: CameraCapability["supportTier"];
+  capability: Omit<CameraCapability, "supportTier" | "detectedAt">;
+  streams: Array<{ codecType: string; codecName: string; width?: number; height?: number }>;
+  error: { reason: "timeout" | "connection_failed"; message: string } | null;
+}
+
+export function testCameraConnection(id: string) {
+  return apiFetch<TestConnectionResult>(`/cameras/${id}/test-connection`, { method: "POST" });
+}
+
+export interface DiscoveredDevice {
+  host: string;
+  port: number;
+  onvifServiceUrl: string | null;
+}
+
+export function discoverCameras(timeoutMs = 5000) {
+  return apiFetch<{ devices: DiscoveredDevice[]; note: string }>("/cameras/discover", {
+    method: "POST",
+    body: JSON.stringify({ timeoutMs }),
+  });
+}
+
+export interface RecordingStatus {
+  active: boolean;
+  jobId: string | null;
+  status: "PENDING" | "RUNNING" | null;
+  startedAt: string | null;
+  segmentSeconds: number | null;
+  segmentCount: number;
+}
+
+export function getRecordingStatus(cameraId: string) {
+  return apiFetch<RecordingStatus>(`/cameras/${cameraId}/recording`);
+}
+
+export function startRecording(cameraId: string, segmentSeconds = 60) {
+  return apiFetch<{ jobId: string; status: string; startedAt: string }>(
+    `/cameras/${cameraId}/recording/start`,
+    { method: "POST", body: JSON.stringify({ segmentSeconds }) },
+  );
+}
+
+export function stopRecording(cameraId: string) {
+  return apiFetch<{ jobId: string; status: string; ingested: number; failed: number }>(
+    `/cameras/${cameraId}/recording/stop`,
+    { method: "POST" },
+  );
+}
+
+export interface RecordingSegmentSummary {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationSec: number | null;
+  fileSizeBytes: string | null;
+  status: "RECORDING" | "COMPLETE" | "UPLOAD_FAILED" | "EXPIRED" | "DELETED";
+}
+
+export function listRecordingDates(cameraId: string) {
+  return apiFetch<{ dates: string[] }>(`/cameras/${cameraId}/recordings/dates`);
+}
+
+export function listRecordings(cameraId: string, date: string) {
+  return apiFetch<{ segments: RecordingSegmentSummary[] }>(
+    `/cameras/${cameraId}/recordings?date=${encodeURIComponent(date)}`,
+  );
+}
+
+export function getPlaybackUrl(cameraId: string, segmentId: string, download = false) {
+  return apiFetch<{ url: string; expiresInSeconds: number }>(
+    `/cameras/${cameraId}/recordings/${segmentId}/url${download ? "?download=true" : ""}`,
+  );
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  key: string;
+  name: string;
+  cameraLimit: number;
+  storageQuotaGb: number;
+  maxRetentionDays: number;
+  priceCentsMonthly: number;
+  isActive: boolean;
+}
+
+export interface SubscriptionInfo {
+  subscription: {
+    id: string;
+    status: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED";
+    billingProvider: string;
+    currentPeriodEnd: string | null;
+    plan: SubscriptionPlan;
+  } | null;
+  usage: {
+    cameraCount: number;
+    cameraLimit: number;
+    storageBytesUsed: string;
+    storageQuotaBytes: string;
+  } | null;
+}
+
+export function getSubscription() {
+  return apiFetch<SubscriptionInfo>("/subscription");
+}
+
+export function listPublicPlans() {
+  return apiFetch<{ plans: SubscriptionPlan[] }>("/subscription/plans");
+}
+
+export function changeSubscriptionPlan(planKey: string) {
+  return apiFetch<{ subscription: SubscriptionInfo["subscription"]; overCameraLimit: boolean }>(
+    "/subscription/change",
+    { method: "POST", body: JSON.stringify({ planKey }) },
+  );
+}
+
+export function cancelSubscription() {
+  return apiFetch<{ subscription: SubscriptionInfo["subscription"] }>("/subscription/cancel", {
+    method: "POST",
+  });
+}
+
+export interface Notification {
+  id: string;
+  type: "CAMERA_OFFLINE" | "RECORDING_STOPPED" | "STORAGE_QUOTA_WARNING" | "UPLOAD_FAILURE" | "RETENTION_CLEANUP_FAILURE";
+  targetId: string | null;
+  message: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export function listNotifications() {
+  return apiFetch<{ notifications: Notification[]; unreadCount: number }>("/notifications");
+}
+
+export function markNotificationRead(id: string) {
+  return apiFetch<Notification>(`/notifications/${id}/read`, { method: "POST" });
+}
+
+export function markAllNotificationsRead() {
+  return apiFetch<void>("/notifications/read-all", { method: "POST" });
 }

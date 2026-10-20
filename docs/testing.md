@@ -25,6 +25,13 @@
   deletes them in `afterAll` (relying on the schema's `onDelete: Cascade` to
   clean up memberships/sessions/cameras/audit logs transitively). Tests run
   with `fileParallelism: false` since they share one real database.
+- **Known gap in the test suite itself**: `afterAll` only deletes DB rows —
+  it does not delete the S3 objects the recording tests upload to
+  LocalStack. Running `test:integration` repeatedly accumulates objects in
+  the `cctv-recordings` bucket. This mirrors the product's own current gap
+  (no orphaned-object cleanup until Phase 7) rather than hiding it; if you
+  need a clean bucket, `docker compose down -v` or manually `aws s3 rm
+  --recursive` against it.
 
 Run both locally before considering a change to `apps/api` done:
 
@@ -53,22 +60,129 @@ pnpm --filter @cctv/api test:integration
 - **Health/readiness**: `/health` always 200; `/ready` reports per-dependency
   status and is exercised against both unreachable (unit test) and real
   (manually, see below) backing services.
+- **RTSP connection testing**: `POST /cameras/:id/test-connection` is
+  exercised against a *real, continuously-live* RTSP stream — MediaMTX +
+  an ffmpeg-fed synthetic test pattern in `docker-compose.yml` (see
+  docs/camera-integration.md) — not a mock. Covered: success (confirms real
+  video/audio stream metadata, updates the capability record to
+  `FULLY_SUPPORTED`), a real failure case (wrong stream path →
+  `UNSUPPORTED`, honest error message with the RTSP URL/credential scrubbed
+  out), and tenant isolation (another tenant's camera 404s, not 403).
+- **ONVIF LAN discovery**: `POST /cameras/discover` is exercised for real —
+  it runs an actual WS-Discovery UDP probe and is asserted to return a
+  well-formed result and require auth. It cannot be asserted to *find*
+  anything in this environment (there's no real ONVIF camera on this
+  network) — see the next section and docs/camera-integration.md for why
+  that's an inherent LAN-only limitation, not a gap in the test.
+- Unit test for the RTSP→capability mapping logic
+  (`capabilitiesFromRtspProbe`): confirms it never sets ONVIF-only
+  capabilities (PTZ, motion events, etc.) from a plain RTSP probe.
+- **Recording pipeline** (`recording.integration.test.ts`): starts a real
+  recording against the live simulated RTSP stream, waits for a real
+  segment, stops it, and asserts — independently, via a direct S3
+  `HeadObjectCommand`, not just "the DB row says so" — that the object
+  actually exists, with a size consistent with real video (not an empty or
+  near-empty file). Also covers: duplicate-start rejection (409), stopping
+  with nothing active (404), and tenant isolation on both start and stop.
+  Beyond the automated test, this was manually verified further — see
+  docs/video-recording.md for a real duration-accuracy bug that manual
+  testing caught and the fix that was verified afterward (bytes-per-second
+  consistency across segments in the same recording).
+- **Playback** (`playback.integration.test.ts`): against a real recorded
+  segment — dates listing, segment listing (asserts the response never
+  contains the internal S3 key structure), a generated signed URL
+  independently fetched and confirmed byte-identical in size to the DB's
+  `fileSizeBytes` with `Content-Type: video/mp4`, the download-mode
+  `Content-Disposition` header confirmed present on the real response, and
+  tenant isolation on both listing and URL generation. See
+  docs/playback.md.
+- **Retention and storage** (`retention.integration.test.ts`): default
+  policy creation on registration, cross-tenant policy-assignment rejection,
+  a real recorded segment's `retentionExpiresAt` matching its assigned
+  policy exactly, `enforceRetention()` run directly against a mix of an
+  actually-expired segment, a no-policy segment, and a not-yet-due
+  segment — with the actually-expired one's S3 object independently
+  confirmed gone via `HeadObjectCommand` and the other two confirmed still
+  present. Storage usage tested against the real DB sum (byte-exact) and
+  for tenant isolation (a second tenant sees zero). See
+  docs/retention-and-storage.md.
+- **Subscriptions and quota enforcement** (`subscription.integration.test.ts`):
+  public plan catalog, auto-created trial subscription on registration,
+  a real plan change (status/limits actually update) and cancellation,
+  rejection of an unknown plan key, and all three quota checks exercised
+  against a real server — camera limit (2 cameras succeed, a 3rd is
+  rejected), retention limit (a too-long policy rejected, a within-limit
+  one accepted on the same camera), and storage quota (a real
+  over-quota-sized segment row blocks starting a new recording). See
+  docs/subscriptions-and-billing.md.
+- **Notifications and camera health** (`notifications.integration.test.ts`):
+  `notifyOnce`'s dedup logic (identical condition suppressed within the
+  cooldown, a different target or type is not suppressed), the
+  notifications API (tenant-scoped listing, mark-read, tenant isolation on
+  mark-read returning 404 not 403), and `checkCameraHealth()` run against a
+  real actively-recording camera confirming zero false-positive
+  notifications while healthy. Beyond the automated test, the actual
+  offline-detection path was manually verified by stopping the simulated
+  camera's real feed and confirming a real `CAMERA_OFFLINE` notification
+  appeared within one health-check cycle and did not duplicate on the
+  next — see docs/monitoring-and-alerts.md.
+- **Failure recovery** (`app.test.ts`'s "async route error handling"):
+  in this suite's fake-env setup the DB URL is unreachable, so `GET
+  /subscription/plans` throws for real on every run; asserts the app
+  answers 500 (not a crash/hang) and keeps serving the next request. This
+  is the regression test for a real bug — a single DB/Redis blip used to
+  crash the entire process, confirmed by actually stopping Postgres against
+  a running dev server, not assumed. The dedicated pass that found and
+  fixed this — including a second real bug (`/ready` taking 27.7s to
+  detect a dropped Redis connection) — is in docs/failure-recovery.md and
+  was verified manually against the real containers, not just this unit
+  test.
+- **Resource-consumption optimization re-verification**: after switching
+  `checkCameraHealth()` from one MediaMTX HTTP call per camera to one bulk
+  call total, the automated healthy-camera test above was re-run and still
+  passes, and the live offline-detection cycle (stop the simulated feed,
+  wait for a real health-check tick, confirm exactly one notification,
+  confirm the cooldown holds on a second tick, confirm recovery) was
+  repeated manually end-to-end and behaves identically to before the
+  change. See docs/deployment.md's "Resource consumption" section.
+- **Security review** (two-pass, per the `security-review` skill's own
+  methodology — identify, then independently verify each finding): found
+  and confirmed two real vulnerabilities (SSRF guard bypass via
+  `connectorType: "SIMULATED"`; MediaMTX's dev-only unauthenticated API
+  bound to all interfaces instead of loopback). Both fixed and verified:
+  the exact exploit payload was tried against the fixed code and rejected,
+  and a regression test exists for the SSRF bypass specifically
+  (`cameras.integration.test.ts`). See docs/security.md.
 
 ## What's not covered yet (tracked, not hidden)
 
-- Camera connectors (RTSP/ONVIF/simulated), capability detection, recording
-  pipeline, playback, retention jobs, billing — none of this is implemented
-  yet (see docs/requirements.md), so there's nothing to test.
+- A real payment provider, payment failure handling, historical usage
+  snapshots — see docs/subscriptions-and-billing.md.
+- Notification delivery beyond the in-app list (no email/SMS/webhook), and
+  per-frame camera health metrics beyond offline/stopped detection — see
+  docs/monitoring-and-alerts.md.
+- Storage reconciliation / orphaned-object cleanup — see
+  docs/retention-and-storage.md.
+- HLS/adaptive playback and cross-segment scrubbing — MVP is direct MP4
+  segment playback with Previous/Next between segments, per
+  docs/playback.md.
+- Motion-based/event-triggered recording, recording health/gap detection,
+  and multi-worker coordination for the ingestion worker (it's a single
+  process today) — see docs/video-recording.md's "not implemented" list.
+- Real ONVIF capability confirmation (PTZ, motion events, image settings,
+  firmware update) — only RTSP stream probing exists; ONVIF today is limited
+  to discovery (finding a device's address), not querying what it supports.
 - Password reset and email verification sending are not implemented (no
   email provider configured) — see docs/architecture.md §7.
-- No Playwright/browser-level tests yet for the web app — the dashboard is
-  new in this phase; frontend test coverage is tracked as a follow-up, not
-  silently skipped.
-- Tests requiring physical camera hardware: none exist yet because no camera
-  connector exists yet. When Phase 4 lands, any test that can only run
-  against a real physical camera (as opposed to the simulated connector or a
-  LAN-reachable test stream) will be explicitly marked and documented here,
-  per the project's rule against claiming untested camera compatibility.
+- No Playwright/browser-level tests yet for the web app — frontend test
+  coverage is tracked as a follow-up, not silently skipped.
+- **Tests against a real physical camera**: none exist. Every "real"
+  connectivity test here runs against the synthetic MediaMTX stream or a
+  WS-Discovery probe with nothing to find — genuine hardware compatibility
+  (a specific manufacturer/model/firmware) has not been verified and must
+  not be claimed until it has been, per the project's rule against claiming
+  untested camera compatibility. If you test against a real camera, record
+  the exact model/firmware here.
 
 ## Manual verification performed (not automated, but actually run)
 

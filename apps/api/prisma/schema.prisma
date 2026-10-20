@@ -239,15 +239,20 @@ enum RecordingJobStatus {
 /// layer (transaction + unique partial index via raw SQL migration) to prevent
 /// duplicate ffmpeg processes recording the same camera twice.
 model RecordingJob {
-  id          String             @id @default(uuid())
-  cameraId    String             @map("camera_id")
-  tenantId    String             @map("tenant_id")
-  status      RecordingJobStatus @default(PENDING)
-  workerId    String?            @map("worker_id")
-  startedAt   DateTime?          @map("started_at")
-  stoppedAt   DateTime?          @map("stopped_at")
-  lastError   String?            @map("last_error")
-  createdAt   DateTime           @default(now()) @map("created_at")
+  id            String             @id @default(uuid())
+  cameraId      String             @map("camera_id")
+  tenantId      String             @map("tenant_id")
+  status        RecordingJobStatus @default(PENDING)
+  /// Target segment length requested from MediaMTX when this job started.
+  /// Actual segment durations vary slightly (fMP4 cuts on keyframe
+  /// boundaries) — this is the target, not a guarantee; see
+  /// docs/video-recording.md.
+  segmentSeconds Int               @default(60) @map("segment_seconds")
+  workerId      String?            @map("worker_id")
+  startedAt     DateTime?          @map("started_at")
+  stoppedAt     DateTime?          @map("stopped_at")
+  lastError     String?            @map("last_error")
+  createdAt     DateTime           @default(now()) @map("created_at")
 
   camera   Camera             @relation(fields: [cameraId], references: [id], onDelete: Cascade)
   segments RecordingSegment[]
@@ -379,6 +384,12 @@ model Notification {
   id        String           @id @default(uuid())
   tenantId  String           @map("tenant_id")
   type      NotificationType
+  /// What this notification is about (usually a camera id) — used to
+  /// de-duplicate repeated alerts for the same ongoing condition (e.g. one
+  /// camera staying offline for an hour of polling) instead of spamming a
+  /// fresh row every poll. Nullable because not every notification type is
+  /// tied to a single target (e.g. a tenant-wide storage warning).
+  targetId  String?          @map("target_id")
   message   String
   readAt    DateTime?        @map("read_at")
   createdAt DateTime         @default(now()) @map("created_at")
@@ -386,6 +397,7 @@ model Notification {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, type, targetId, createdAt])
   @@map("notifications")
 }
 

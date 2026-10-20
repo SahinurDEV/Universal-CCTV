@@ -75,7 +75,7 @@ describe("camera CRUD and tenant isolation", () => {
     expect(res.body.hasCredential).toBe(true);
     expect(res.body.capability.supportTier).toBe("UNSUPPORTED");
     expect(res.body.capability.liveView).toBe(false);
-    expect(res.body.connectionImplemented).toBe(false);
+    expect(res.body.connectionImplemented).toBe(true);
     // The plaintext credential must never come back in the API response.
     expect(res.body.credential).toBeUndefined();
     expect(JSON.stringify(res.body)).not.toContain("camera-secret");
@@ -103,6 +103,27 @@ describe("camera CRUD and tenant isolation", () => {
     });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("unsafe_host");
+  });
+
+  it("rejects an arbitrary host declared as SIMULATED — a prior real bug let this bypass the guard entirely", async () => {
+    const res = await agentA.post("/cameras").send({
+      name: "Fake Simulated Camera",
+      connectorType: "SIMULATED",
+      host: "169.254.169.254",
+      port: 80,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("unsafe_host");
+  });
+
+  it("still allows a real SIMULATED camera pinned to the dev fixture host", async () => {
+    const res = await agentA.post("/cameras").send({
+      name: "Real Simulated Camera For Guard Test",
+      connectorType: "SIMULATED",
+      host: "localhost",
+      port: 8554,
+    });
+    expect(res.status).toBe(201);
   });
 
   it("lists only the creating tenant's cameras", async () => {
@@ -157,4 +178,114 @@ describe("camera CRUD and tenant isolation", () => {
     const getRes = await agentA.get(`/cameras/${cameraId}`);
     expect(getRes.status).toBe(404);
   });
+});
+
+describe("POST /cameras/:id/test-connection", () => {
+  let agent: ReturnType<typeof request.agent>;
+
+  beforeAll(async () => {
+    agent = request.agent(app);
+    const reg = await agent
+      .post("/auth/register")
+      .send({ email: uniqueEmail(), password: "test-connection-password-123", tenantName: "Test Connection Co" });
+    createdUserIds.push(reg.body.user.id);
+    createdTenantIds.push(reg.body.tenant.id);
+  });
+
+  it("confirms capabilities for real against the live simulated RTSP stream", async () => {
+    // docker-compose's mediamtx + simulated-camera services publish a real,
+    // continuously-live test-pattern stream (h264 video + aac audio) over
+    // RTSP — this hits that for real, not a mock. Requires
+    // `docker compose up` (see docs/testing.md).
+    const createRes = await agent.post("/cameras").send({
+      name: "Simulated Test Camera",
+      connectorType: "SIMULATED",
+      host: "localhost",
+      port: 8554,
+      credential: { path: "/simulated" },
+    });
+    expect(createRes.status).toBe(201);
+    const cameraId = createRes.body.id;
+
+    const testRes = await agent.post(`/cameras/${cameraId}/test-connection`);
+    expect(testRes.status).toBe(200);
+    expect(testRes.body.ok).toBe(true);
+    expect(testRes.body.supportTier).toBe("FULLY_SUPPORTED");
+    expect(testRes.body.capability.liveView).toBe(true);
+    expect(testRes.body.capability.cloudRecording).toBe(true);
+    expect(testRes.body.capability.audio).toBe(true);
+    expect(testRes.body.streams.some((s: { codecType: string }) => s.codecType === "video")).toBe(true);
+
+    // The capability record on the camera itself should now reflect the
+    // confirmed result, not the "nothing confirmed yet" default from create.
+    const detail = await agent.get(`/cameras/${cameraId}`);
+    expect(detail.body.capability.supportTier).toBe("FULLY_SUPPORTED");
+    expect(detail.body.capability.liveView).toBe(true);
+  }, 20000);
+
+  it("reports a real, honest failure for a camera that doesn't actually stream", async () => {
+    const createRes = await agent.post("/cameras").send({
+      name: "Nonexistent Path Camera",
+      connectorType: "SIMULATED",
+      host: "localhost",
+      port: 8554,
+      credential: { path: "/this-path-does-not-exist" },
+    });
+    const cameraId = createRes.body.id;
+
+    const testRes = await agent.post(`/cameras/${cameraId}/test-connection`);
+    expect(testRes.status).toBe(200);
+    expect(testRes.body.ok).toBe(false);
+    expect(testRes.body.supportTier).toBe("UNSUPPORTED");
+    expect(testRes.body.capability.liveView).toBe(false);
+    expect(testRes.body.error.reason).toBe("connection_failed");
+    // The error message must never leak the RTSP URL.
+    expect(testRes.body.error.message).not.toContain("rtsp://");
+  }, 20000);
+
+  it("404s for another tenant's camera, not 403", async () => {
+    const otherAgent = request.agent(app);
+    const otherReg = await otherAgent
+      .post("/auth/register")
+      .send({ email: uniqueEmail(), password: "other-tenant-password-123", tenantName: "Other Tenant Co" });
+    createdUserIds.push(otherReg.body.user.id);
+    createdTenantIds.push(otherReg.body.tenant.id);
+
+    const createRes = await agent.post("/cameras").send({
+      name: "Isolation Check Camera",
+      connectorType: "SIMULATED",
+      host: "localhost",
+      port: 8554,
+      credential: { path: "/simulated" },
+    });
+    const cameraId = createRes.body.id;
+
+    const testRes = await otherAgent.post(`/cameras/${cameraId}/test-connection`);
+    expect(testRes.status).toBe(404);
+  });
+});
+
+describe("POST /cameras/discover", () => {
+  it("requires authentication", async () => {
+    const res = await request(app).post("/cameras/discover").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("runs a real WS-Discovery probe and returns a well-formed result", async () => {
+    const agent = request.agent(app);
+    const reg = await agent
+      .post("/auth/register")
+      .send({ email: uniqueEmail(), password: "discover-password-123", tenantName: "Discover Test Co" });
+    createdUserIds.push(reg.body.user.id);
+    createdTenantIds.push(reg.body.tenant.id);
+
+    // Short timeout since this test environment has no real ONVIF camera to
+    // find — the point is confirming the probe runs and resolves cleanly
+    // (not that it finds anything), per docs/camera-integration.md's
+    // documented LAN-only limitation.
+    const res = await agent.post("/cameras/discover").send({ timeoutMs: 1000 });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.devices)).toBe(true);
+    expect(typeof res.body.note).toBe("string");
+  }, 10000);
 });

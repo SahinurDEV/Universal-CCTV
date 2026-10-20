@@ -2,8 +2,9 @@ import type { Request, Response, NextFunction } from "express";
 import type { Role } from "@prisma/client";
 import { findValidSession, SESSION_COOKIE_NAME } from "../lib/sessions.js";
 import { prisma } from "../lib/db.js";
+import { asyncHandler } from "./async-handler.js";
 
-export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+export const requireAuth = asyncHandler(async (req, res, next) => {
   const rawToken = req.cookies?.[SESSION_COOKIE_NAME];
   if (!rawToken) {
     return res.status(401).json({ error: "unauthorized" });
@@ -17,11 +18,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   req.authUser = { id: session.user.id, email: session.user.email };
   req.authSession = { id: session.id, activeTenantId: session.activeTenantId };
   next();
-}
+});
 
 /** Must run after requireAuth. Requires the session to have an active tenant
  * the user is actually a member of, and attaches the membership's role. */
-export async function requireTenant(req: Request, res: Response, next: NextFunction) {
+export const requireTenant = asyncHandler(async (req, res, next) => {
   if (!req.authUser || !req.authSession) {
     return res.status(401).json({ error: "unauthorized" });
   }
@@ -43,7 +44,7 @@ export async function requireTenant(req: Request, res: Response, next: NextFunct
 
   req.authTenant = { id: tenantId, role: membership.role };
   next();
-}
+});
 
 export function requireRole(...roles: Role[]) {
   return (req: Request, res: Response, next: NextFunction) => {

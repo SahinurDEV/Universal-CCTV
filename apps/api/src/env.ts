@@ -40,6 +40,13 @@ const envSchema = z.object({
   SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(300),
 
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+
+  // MediaMTX's two HTTP APIs (see docker-compose.yml / infra/mediamtx/mediamtx.yml).
+  // Config API: add/remove per-camera recording paths. Playback API: list/fetch
+  // completed segments. Both are unauthenticated in local dev on purpose — see
+  // the warning in infra/mediamtx/mediamtx.yml and docs/security.md.
+  MEDIAMTX_API_URL: z.string().default("http://localhost:9997"),
+  MEDIAMTX_PLAYBACK_URL: z.string().default("http://localhost:9996"),
 });
 
 export type Env = z.infer<typeof envSchema>;

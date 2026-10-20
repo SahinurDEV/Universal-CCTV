@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "@/lib/useSession";
-import { logout } from "@/lib/api";
+import { listNotifications, logout } from "@/lib/api";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview" },
@@ -23,12 +23,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const session = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (session.status === "unauthenticated") {
       router.push("/login");
     }
   }, [session.status, router]);
+
+  useEffect(() => {
+    if (session.status !== "authenticated") return;
+    function refresh() {
+      listNotifications()
+        .then((res) => setUnreadCount(res.unreadCount))
+        .catch(() => {
+          /* non-fatal — the nav badge just won't update */
+        });
+    }
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => clearInterval(interval);
+  }, [session.status]);
 
   if (session.status === "loading") {
     return (
@@ -67,11 +82,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={item.href}
                 href={item.href}
-                className={`block rounded px-3 py-2 text-sm ${
+                className={`flex items-center justify-between rounded px-3 py-2 text-sm ${
                   isActive ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-900 hover:text-white"
                 }`}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.href === "/dashboard/alerts" && unreadCount > 0 && (
+                  <span className="rounded-full bg-amber-600 px-1.5 py-0.5 text-xs text-white">
+                    {unreadCount}
+                  </span>
+                )}
               </Link>
             );
           })}

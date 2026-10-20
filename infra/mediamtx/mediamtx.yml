@@ -1,0 +1,37 @@
+# Minimal override of MediaMTX's default config for local dev.
+# Anything not set here keeps the image's built-in default
+# (https://github.com/bluenviron/mediamtx/blob/main/mediamtx.yml).
+#
+# - api/playback enabled so apps/api can dynamically add per-camera
+#   recording paths and fetch completed segments over HTTP (see
+#   docs/video-recording.md) instead of needing a shared filesystem.
+# - `all_others` keeps the default "any publisher may create any path"
+#   behavior, which is what docker-compose's `simulated-camera` service
+#   relies on to publish the dev test stream without pre-registration.
+
+api: yes
+apiAddress: :9997
+
+playback: yes
+playbackAddress: :9996
+
+# LOCAL DEV ONLY. MediaMTX's default admin user only grants unauthenticated
+# API/playback access from 127.0.0.1/::1 — which Docker's published ports do
+# not preserve (the request arrives from the Docker bridge gateway, not
+# true loopback), so apps/api running on the host gets "authentication
+# error" against the default config. This override grants api/playback/
+# publish/read to any caller with no credential, which is acceptable ONLY
+# because this port isn't exposed beyond this dev machine. Before any
+# shared or production deployment, replace this with real credentials (or
+# network-level isolation) — see docs/security.md.
+authInternalUsers:
+  - user: any
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+
+paths:
+  all_others:

@@ -6,9 +6,13 @@ import { createSession, findValidSession, revokeSession, setActiveTenant, SESSIO
 import { writeAuditLog } from "../lib/audit.js";
 import { requireAuth } from "../middleware/auth.js";
 import { authRateLimiter } from "../middleware/rateLimit.js";
+import { asyncHandler } from "../middleware/async-handler.js";
 import { loadEnv } from "../env.js";
+import { logger } from "../lib/logger.js";
 
 export const authRouter = Router();
+
+const TRIAL_PERIOD_DAYS = 14;
 
 function cookieOptions() {
   const env = loadEnv();
@@ -26,7 +30,7 @@ const registerSchema = z.object({
   tenantName: z.string().min(1).max(200),
 });
 
-authRouter.post("/auth/register", authRateLimiter, async (req, res) => {
+authRouter.post("/auth/register", authRateLimiter, asyncHandler(async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "invalid_request", details: parsed.error.issues });
@@ -47,6 +51,40 @@ authRouter.post("/auth/register", authRateLimiter, async (req, res) => {
     const user = await tx.user.create({ data: { email, passwordHash } });
     const tenant = await tx.tenant.create({ data: { name: tenantName } });
     await tx.membership.create({ data: { tenantId: tenant.id, userId: user.id, role: "OWNER" } });
+
+    // Example retention tiers per docs/requirements.md §9 — not fixed
+    // product commitments, just starting options every new tenant gets so
+    // there's always a sensible default (30 days) rather than leaving
+    // retention policy undefined (undefined policy means "never auto-delete,"
+    // not "delete immediately" — see recording/retention.ts).
+    await tx.retentionPolicy.createMany({
+      data: [
+        { tenantId: tenant.id, name: "7 days", retentionDays: 7, isDefault: false },
+        { tenantId: tenant.id, name: "30 days", retentionDays: 30, isDefault: true },
+        { tenantId: tenant.id, name: "90 days", retentionDays: 90, isDefault: false },
+      ],
+    });
+
+    // Every tenant starts on a trial of the free plan. If the free plan
+    // hasn't been seeded (see prisma/seed.ts — a deployment prerequisite),
+    // registration still succeeds but the tenant has no subscription; quota
+    // checks (camera limit, storage quota) treat "no subscription" the same
+    // as "unlimited" rather than blocking registration on a seeding bug —
+    // see routes/subscription.ts.
+    const freePlan = await tx.subscriptionPlan.findUnique({ where: { key: "free" } });
+    if (freePlan) {
+      await tx.subscription.create({
+        data: {
+          tenantId: tenant.id,
+          planId: freePlan.id,
+          status: "TRIALING",
+          currentPeriodEnd: new Date(Date.now() + TRIAL_PERIOD_DAYS * 24 * 60 * 60 * 1000),
+        },
+      });
+    } else {
+      logger.warn({ tenantId: tenant.id }, "no 'free' subscription plan found — has prisma/seed.ts been run?");
+    }
+
     return { user, tenant };
   });
 
@@ -64,14 +102,14 @@ authRouter.post("/auth/register", authRateLimiter, async (req, res) => {
     user: { id: user.id, email: user.email },
     tenant: { id: tenant.id, name: tenant.name, role: "OWNER" },
   });
-});
+}));
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
-authRouter.post("/auth/login", authRateLimiter, async (req, res) => {
+authRouter.post("/auth/login", authRateLimiter, asyncHandler(async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "invalid_request", details: parsed.error.issues });
@@ -112,18 +150,18 @@ authRouter.post("/auth/login", authRateLimiter, async (req, res) => {
     tenants: user.memberships.map((m) => ({ id: m.tenant.id, name: m.tenant.name, role: m.role })),
     activeTenantId: firstMembership?.tenantId ?? null,
   });
-});
+}));
 
-authRouter.post("/auth/logout", requireAuth, async (req, res) => {
+authRouter.post("/auth/logout", requireAuth, asyncHandler(async (req, res) => {
   const rawToken = req.cookies?.[SESSION_COOKIE_NAME];
   if (rawToken) {
     await revokeSession(rawToken);
   }
   res.clearCookie(SESSION_COOKIE_NAME);
   res.status(204).send();
-});
+}));
 
-authRouter.get("/auth/me", requireAuth, async (req, res) => {
+authRouter.get("/auth/me", requireAuth, asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.authUser!.id },
     include: { memberships: { include: { tenant: true } } },
@@ -137,11 +175,11 @@ authRouter.get("/auth/me", requireAuth, async (req, res) => {
     tenants: user.memberships.map((m) => ({ id: m.tenant.id, name: m.tenant.name, role: m.role })),
     activeTenantId: req.authSession!.activeTenantId,
   });
-});
+}));
 
 const switchTenantSchema = z.object({ tenantId: z.string().uuid() });
 
-authRouter.post("/auth/switch-tenant", requireAuth, async (req, res) => {
+authRouter.post("/auth/switch-tenant", requireAuth, asyncHandler(async (req, res) => {
   const parsed = switchTenantSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "invalid_request", details: parsed.error.issues });
@@ -156,4 +194,4 @@ authRouter.post("/auth/switch-tenant", requireAuth, async (req, res) => {
 
   await setActiveTenant(req.authSession!.id, parsed.data.tenantId);
   res.status(204).send();
-});
+}));

@@ -50,6 +50,15 @@ docs/deployment.md for running this anywhere but here.
   camera's LAN (true for this local/self-hosted setup) — see
   docs/camera-integration.md for why a future cloud deployment needs a
   different mechanism (a local gateway agent, not built yet).
+- **Real ONVIF capability confirmation**: for ONVIF cameras, "Test
+  Connection" now also connects to the device's real ONVIF service and
+  reports its actually-advertised PTZ/zoom/motion-events/imaging/firmware
+  capabilities, instead of permanently leaving every ONVIF camera on
+  "missing capabilities." Honest limitation (same as discovery above): no
+  physical ONVIF camera exists in this environment, so only the
+  connect-and-fail-cleanly path and the real route wiring (against the
+  live simulated RTSP stream) have been verified — see
+  docs/camera-integration.md.
 - **Dashboard**: login/register pages, auth-gated layout with the full nav
   (Overview, Cameras, Live View, Recordings, Storage, Locations, Alerts,
   Integrations, Subscription, Settings), a working Cameras list/add/detail
@@ -129,21 +138,22 @@ docs/deployment.md for running this anywhere but here.
   15-minute safety window so an in-flight upload is never mistaken for an
   orphan), reverified against the same real scenario afterward. See
   docs/retention-and-storage.md.
-- Test suite: 9 unit tests + 54 integration tests (auth lifecycle, tenant
+- Test suite: 15 unit tests + 57 integration tests (auth lifecycle, tenant
   isolation, RBAC, SSRF guard, credential confidentiality, real RTSP
-  connection testing, ONVIF discovery, real recording start/stop with S3
-  verification, real playback with byte-exact verification, real retention
-  enforcement and storage accounting, subscription lifecycle and quota
-  enforcement, notification dedup and real camera health checks, async
-  error handling under a simulated DB failure, orphaned-object
-  reconciliation) — see docs/testing.md.
+  connection testing, ONVIF discovery, ONVIF capability confirmation
+  (unit-tested derivation logic + real connect-and-fail-cleanly behavior +
+  real route wiring), real recording start/stop with S3 verification, real
+  playback with byte-exact verification, real retention enforcement and
+  storage accounting, subscription lifecycle and quota enforcement,
+  notification dedup and real camera health checks, async error handling
+  under a simulated DB failure, orphaned-object reconciliation) — see
+  docs/testing.md.
 
 Not yet implemented: a real payment provider, payment failure handling,
-email sending (verification/password-reset), real ONVIF capability
-confirmation beyond discovery (PTZ, motion events, etc.), motion-based
-recording, HLS/adaptive playback, historical usage snapshots, notification
-delivery beyond the in-app list (no email/SMS/webhook). See
-docs/requirements.md §3 and docs/testing.md for the explicit list.
+email sending (verification/password-reset), motion-based recording,
+HLS/adaptive playback, historical usage snapshots, notification delivery
+beyond the in-app list (no email/SMS/webhook). See docs/requirements.md §3
+and docs/testing.md for the explicit list.
 
 ## Prerequisites
 
@@ -277,7 +287,15 @@ Postgres and confirmed recovery with no server restart → actually stopped
 Redis and timed `/ready` with a real `curl`, finding it took 27.7s to
 report the failure before a fix, then re-measured at a capped 3.02s after
 the fix → actually stopped MediaMTX and confirmed a recording-start attempt
-failed cleanly (502, <20ms, no crash) rather than hanging. All through the
+failed cleanly (502, <20ms, no crash) rather than hanging → deleted a real
+camera with two real recorded segments and confirmed via direct DB/S3
+checks that it orphaned both objects (the actual bug), then ran the
+reconciliation job and confirmed both were deleted → created an ONVIF-type
+camera pointed at the real simulated RTSP stream with its ONVIF port
+pointed at a real non-ONVIF HTTP service, confirmed RTSP succeeded, the
+real ONVIF probe was attempted and failed cleanly, and the camera
+correctly landed on CONNECTED_MISSING_CAPABILITIES rather than claiming
+capabilities it never confirmed. All through the
 live API. The web app's pages were confirmed to render their
 expected content via the rendered HTML. Actual in-browser interaction
 (clicking through forms, verifying the client-side auth redirect, clicking

@@ -3,35 +3,18 @@ import { prisma } from "../lib/db.js";
 import { redis } from "../lib/redis.js";
 import { logger } from "../lib/logger.js";
 import { asyncHandler } from "../middleware/async-handler.js";
+import { withTimeout } from "../lib/timeout.js";
 
 export const healthRouter = Router();
 
+// A real bug was found and fixed here: without a bound, stopping Redis made
+// `/ready` take ~28 seconds to respond (ioredis's own connection-close
+// detection, not an infinite hang, but still far slower than any real load
+// balancer/k8s readiness-probe timeout would tolerate) — confirmed by timing
+// an actual request against a running server with Redis stopped. A
+// readiness probe that's itself slow to answer is as operationally bad as
+// one that lies.
 const READINESS_CHECK_TIMEOUT_MS = 3000;
-
-/**
- * Bounds how long a single dependency check can take. A real bug was found
- * and fixed here: without this, stopping Redis made `/ready` take ~28
- * seconds to respond (ioredis's own connection-close detection, not an
- * infinite hang, but still far slower than any real load balancer/k8s
- * readiness-probe timeout would tolerate) — confirmed by timing an actual
- * request against a running server with Redis stopped. A readiness probe
- * that's itself slow to answer is as operationally bad as one that lies.
- */
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} check timed out after ${ms}ms`)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
-}
 
 /** Liveness: process is up and able to respond. No dependency checks. */
 healthRouter.get("/health", (_req, res) => {

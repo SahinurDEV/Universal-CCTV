@@ -80,6 +80,20 @@ pnpm --filter @cctv/api test:integration
 - Unit test for the RTSP→capability mapping logic
   (`capabilitiesFromRtspProbe`): confirms it never sets ONVIF-only
   capabilities (PTZ, motion events, etc.) from a plain RTSP probe.
+- **ONVIF capability confirmation** (`onvif-capabilities.test.ts` +
+  `onvif-capabilities.integration.test.ts`): unit tests the pure
+  `deriveOnvifCapabilities` mapping against synthetic ONVIF response
+  shapes (PTZ claimed-but-unused by any profile correctly stays
+  unconfirmed; Events/Imaging/firmware signals derived independently of
+  PTZ). Integration-tests `probeOnvifCapabilities` making a real network
+  connection that fails cleanly and promptly (both asserted under 10s, not
+  hanging to an internal timeout) against a real non-ONVIF local HTTP
+  server and a closed port. A further test in `cameras.integration.test.ts`
+  exercises the real route wiring: an ONVIF-type camera pointed at the live
+  simulated RTSP stream (confirms real) with its ONVIF port pointed at a
+  real non-ONVIF service correctly lands on `CONNECTED_MISSING_CAPABILITIES`,
+  not `FULLY_SUPPORTED`. See docs/camera-integration.md for the explicit
+  caveat: none of this has been run against a real physical ONVIF camera.
 - **Recording pipeline** (`recording.integration.test.ts`): starts a real
   recording against the live simulated RTSP stream, waits for a real
   segment, stops it, and asserts — independently, via a direct S3
@@ -181,9 +195,6 @@ pnpm --filter @cctv/api test:integration
 - Motion-based/event-triggered recording, recording health/gap detection,
   and multi-worker coordination for the ingestion worker (it's a single
   process today) — see docs/video-recording.md's "not implemented" list.
-- Real ONVIF capability confirmation (PTZ, motion events, image settings,
-  firmware update) — only RTSP stream probing exists; ONVIF today is limited
-  to discovery (finding a device's address), not querying what it supports.
 - Password reset and email verification sending are not implemented (no
   email provider configured) — see docs/architecture.md §7.
 - No Playwright/browser-level tests yet for the web app — frontend test

@@ -43,11 +43,13 @@ In scope for the initial build:
    and not yet built — this only probes and reports, it doesn't record.
 4. ONVIF connector (best-effort): device discovery on LAN (WS-Discovery), capability
    fetch (profiles, PTZ presence) where the device answers ONVIF correctly. Falls back
-   to RTSP-only capability set when ONVIF probing fails or times out. **Partially
-   done**: discovery (`POST /cameras/discover`) is implemented and real, with the
-   documented LAN-only limitation (docs/camera-integration.md). Capability fetch
-   beyond discovery (profiles, PTZ presence) is not implemented — an ONVIF camera
-   always lands on `CONNECTED_MISSING_CAPABILITIES` once its RTSP stream is confirmed.
+   to RTSP-only capability set when ONVIF probing fails or times out. **Done**, with an
+   honest limitation: discovery (`POST /cameras/discover`) and capability fetch (PTZ,
+   zoom, motion events, image settings, firmware update — `connectors/onvif-capabilities.ts`)
+   are both implemented and real, and fall back cleanly to `CONNECTED_MISSING_CAPABILITIES`
+   when ONVIF probing fails. Neither has been verified against a real physical ONVIF
+   camera (none exists in this environment) — only that each fails cleanly against
+   real non-ONVIF services/networks. See docs/camera-integration.md.
 5. Simulated connector: for dev/CI, serves a looping local test video over RTSP
    (via an ffmpeg-fed MediaMTX container) so the full pipeline can be exercised with
    zero physical hardware. **Done** — see `docker-compose.yml`'s `mediamtx` +

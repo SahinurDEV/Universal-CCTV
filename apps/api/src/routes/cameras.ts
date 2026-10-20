@@ -5,9 +5,11 @@ import { requireAuth, requireTenant, requireRole } from "../middleware/auth.js";
 import { assertSafeCameraHost, UnsafeCameraHostError } from "../lib/network-guard.js";
 import { encryptSecret, decryptSecret } from "../lib/crypto.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { logger } from "../lib/logger.js";
 import { EMPTY_CAPABILITIES, deriveSupportTier, type CameraCapabilities } from "@cctv/shared";
 import { buildRtspUrl } from "../connectors/rtsp-url.js";
 import { probeRtspStream, capabilitiesFromRtspProbe } from "../connectors/rtsp-probe.js";
+import { probeOnvifCapabilities } from "../connectors/onvif-capabilities.js";
 import { discoverOnvifDevices } from "../connectors/onvif-discovery.js";
 import { getActiveSubscription, getCameraCount } from "../lib/quota.js";
 import { asyncHandler } from "../middleware/async-handler.js";
@@ -400,11 +402,25 @@ camerasRouter.post("/:id/test-connection", requireRole("OWNER", "ADMIN", "OPERAT
     ? capabilitiesFromRtspProbe(probeResult.streams)
     : EMPTY_CAPABILITIES;
 
-  // ONVIF capability confirmation (PTZ, motion events, etc.) isn't built
-  // yet — only the RTSP stream itself is probed here, for every connector
-  // type. So an ONVIF camera that streams fine still lands on
-  // CONNECTED_MISSING_CAPABILITIES honestly, not FULLY_SUPPORTED.
-  const onvifReachable = camera.connectorType !== "ONVIF";
+  // Real ONVIF capability confirmation (PTZ, motion events, image settings,
+  // firmware update) — only attempted for ONVIF cameras, and only once the
+  // RTSP stream itself is already confirmed (no point opening a second
+  // connection to a device that isn't even streaming). See
+  // connectors/onvif-capabilities.ts for the honesty caveat: this has only
+  // been verified to fail cleanly against non-ONVIF hosts, not to
+  // correctly parse a real device's response — there's no physical ONVIF
+  // camera in this environment.
+  let onvifReachable = camera.connectorType !== "ONVIF";
+  if (probeResult.ok && camera.connectorType === "ONVIF") {
+    const onvifResult = await probeOnvifCapabilities(camera.host, camera.onvifPort ?? 80, credentialParts);
+    if (onvifResult.ok) {
+      onvifReachable = true;
+      Object.assign(confirmed, onvifResult.capabilities);
+    } else {
+      logger.warn({ cameraId: camera.id, reason: onvifResult.reason }, "ONVIF capability probe failed; falling back to RTSP-only capabilities");
+    }
+  }
+
   const supportTier = deriveSupportTier({
     streamConfirmed: probeResult.ok,
     onvifReachable,

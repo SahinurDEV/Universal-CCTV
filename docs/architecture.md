@@ -123,7 +123,7 @@ Rules enforced in code, not just docs:
 |---|---|---|
 | Direct RTSP (same LAN as API/worker) | **Implemented** | `POST /cameras/:id/test-connection`; used for local dev and for self-hosted/on-prem deployments where the API runs on-site |
 | Local gateway, outbound tunnel | Documented, not implemented | Needed for cloud-hosted workers to reach cameras behind residential NAT; see §6. ONVIF discovery and RTSP testing both inherit this limitation today — they only work on the API's own LAN |
-| ONVIF discovery/capability | **Discovery implemented**; capability fetch (profiles, PTZ) not yet | WS-Discovery on the same broadcast domain as the probing process; see docs/camera-integration.md |
+| ONVIF discovery/capability | **Both implemented** — discovery (WS-Discovery) and capability fetch (PTZ, zoom, motion events, imaging, firmware) | WS-Discovery on the same broadcast domain as the probing process; capability fetch's connect-and-fail-cleanly path verified against real non-ONVIF services (no physical ONVIF camera in this environment); see docs/camera-integration.md |
 | Manufacturer API/SDK adapters | No | Requires per-manufacturer developer agreements; stubbed as a connector type with none implemented |
 
 ## 5. SSRF / network-safety boundary

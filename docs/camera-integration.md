@@ -15,14 +15,16 @@ their own camera through the dashboard.
 | Register a camera's connection details | `POST /cameras` — stores host/port/encrypted credential, creates an unconfirmed (`UNSUPPORTED`) capability record | Real Postgres (integration tests) |
 | Test connection | `POST /cameras/:id/test-connection` — shells out to `ffprobe` against the camera's RTSP URL with an 8s timeout, parses the real stream list | A real, continuously-live RTSP stream (MediaMTX + a synthetic ffmpeg feed in `docker-compose.yml`) |
 | LAN discovery | `POST /cameras/discover` — ONVIF WS-Discovery (UDP multicast, via the `onvif` npm package) for 1–15 seconds | Runs for real on this machine; finds 0 devices because there's no real ONVIF camera on this network — see the limitation below |
+| ONVIF capability confirmation | `POST /cameras/:id/test-connection`, for `connectorType: "ONVIF"` only, after a successful RTSP probe — connects to the device's real ONVIF SOAP service and reports its actually-advertised PTZ/motion-events/imaging/firmware-update capabilities | The connect-and-fail-cleanly path, against real non-ONVIF local services (see the limitation below — there's no physical ONVIF camera in this environment, so the "connects to a real device and parses it correctly" path is unverified) |
 
-Everything else in docs/architecture.md §3 (ONVIF capability confirmation
-beyond "does the RTSP stream exist" — PTZ, motion events, image settings,
-firmware update) is **not implemented**. A camera can test as
-`FULLY_SUPPORTED` today purely on the strength of its RTSP stream; that tier
-name reflects "everything this camera claimed to need was confirmed," not
-"every possible camera feature was confirmed" — see `capabilitiesFromRtspProbe`
-in `apps/api/src/connectors/rtsp-probe.ts` for exactly what is and isn't set.
+A camera can test as `FULLY_SUPPORTED` purely on the strength of its RTSP
+stream when its connector type isn't `ONVIF` (RTSP connector type), or when
+an ONVIF device's real capability probe succeeds and nothing it claims is
+left unconfirmed. That tier name reflects "everything this camera claimed
+to need was confirmed," not "every possible camera feature was confirmed" —
+see `capabilitiesFromRtspProbe` in `rtsp-probe.ts` and
+`deriveOnvifCapabilities` in `connectors/onvif-capabilities.ts` for exactly
+what each one does and doesn't set.
 
 ### Connection-test mechanics
 
@@ -57,6 +59,43 @@ requires the local gateway agent described in docs/architecture.md §6 (an
 on-prem process that opens an outbound connection to the cloud) — not built
 yet. Don't remove this limitation note when that gateway ships; update it to
 describe how discovery routes through the gateway instead.
+
+### ONVIF capability confirmation mechanics and its real limitation
+
+`apps/api/src/connectors/onvif-capabilities.ts`'s `probeOnvifCapabilities`
+connects to the device's ONVIF service (the real `onvif` npm package's
+`Cam.connect`, which runs `GetSystemDateAndTime` → `GetServices`/
+`GetCapabilities` → `GetProfiles`/`GetVideoSources` in sequence) and derives:
+
+- `ptz`/`zoom`: true only if the device advertises the PTZ **service**
+  *and* its active media profile actually has a PTZ configuration attached
+  (`activeSource.ptz`) — advertising the service alone isn't enough, since
+  a fixed-lens camera on shared firmware can advertise it without any
+  profile using it. ONVIF has no separate "zoom" flag in its capabilities
+  document, so a PTZ-capable profile is the closest honest signal without a
+  deeper `GetConfigurationOptions` probe this function doesn't attempt.
+- `motionEvents`: the device advertises an Events service at all — **not**
+  that motion detection specifically works, which would require actually
+  subscribing and waiting for a real motion event to fire.
+- `imageSettings`: the device advertises an Imaging service.
+- `firmwareUpdate`: the device's system capabilities explicitly advertise
+  firmware upgrade support.
+
+**Real limitation, same as ONVIF discovery above**: there is no physical
+ONVIF camera in this development environment. What's actually been
+verified: `deriveOnvifCapabilities` (the pure mapping logic above) against
+synthetic ONVIF response shapes (unit test), and `probeOnvifCapabilities`
+making a genuine network connection that fails cleanly and promptly against
+a real but non-ONVIF local HTTP server and against a closed port
+(integration test) — proving the code path runs for real, not that it
+correctly parses a real device's response. The route wiring itself
+(`POST /cameras/:id/test-connection` attempting this for an ONVIF camera
+whose RTSP stream is real and confirmed, then falling back honestly to
+`CONNECTED_MISSING_CAPABILITIES` when the ONVIF probe fails) is also
+integration-tested against the real simulated stream. **Do not claim the
+"found a real device's actual capabilities" path works until it has been
+run against real hardware and that's written down here with the specific
+model/firmware tested.**
 
 ### SSRF guard interaction with SIMULATED cameras
 

@@ -266,8 +266,10 @@ export default function CameraDetailPage() {
           <dd>{camera.hasCredential ? "Yes (encrypted)" : "No"}</dd>
         </dl>
         <p className="mt-3 text-xs text-slate-500">
-          "Test Connection" actually probes the RTSP stream. ONVIF-specific capabilities (PTZ, motion
-          events, etc.) still aren't confirmed by this — only the video/audio stream itself is.
+          "Test Connection" probes the RTSP stream, and for ONVIF cameras also connects to the
+          device's ONVIF service to check its real PTZ/motion-event/imaging/firmware capabilities.
+          No physical ONVIF camera has been tested against this build yet — don't assume a specific
+          model/firmware works until it's been verified and documented.
         </p>
       </section>
 

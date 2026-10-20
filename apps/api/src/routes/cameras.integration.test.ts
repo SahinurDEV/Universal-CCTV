@@ -182,6 +182,7 @@ describe("camera CRUD and tenant isolation", () => {
 
 describe("POST /cameras/:id/test-connection", () => {
   let agent: ReturnType<typeof request.agent>;
+  let tenantId: string;
 
   beforeAll(async () => {
     agent = request.agent(app);
@@ -190,6 +191,7 @@ describe("POST /cameras/:id/test-connection", () => {
       .send({ email: uniqueEmail(), password: "test-connection-password-123", tenantName: "Test Connection Co" });
     createdUserIds.push(reg.body.user.id);
     createdTenantIds.push(reg.body.tenant.id);
+    tenantId = reg.body.tenant.id;
   });
 
   it("confirms capabilities for real against the live simulated RTSP stream", async () => {
@@ -263,6 +265,56 @@ describe("POST /cameras/:id/test-connection", () => {
     const testRes = await otherAgent.post(`/cameras/${cameraId}/test-connection`);
     expect(testRes.status).toBe(404);
   });
+
+  it(
+    "for an ONVIF camera, attempts real ONVIF capability confirmation and falls back honestly when the device isn't actually ONVIF",
+    async () => {
+      // Created directly via Prisma, not POST /cameras: the create route's
+      // SSRF guard blocks "localhost" for every connector type except
+      // SIMULATED by design (see docs/security.md), and that guard already
+      // has its own dedicated test coverage — this test exists to exercise
+      // the test-connection route's ONVIF-capability wiring itself, which
+      // is a separate concern from the create-time host guard.
+      const camera = await prisma.camera.create({
+        data: {
+          tenantId,
+          name: "ONVIF Wiring Check Camera",
+          connectorType: "ONVIF",
+          host: "localhost",
+          port: 8554, // the real simulated RTSP stream — this should succeed
+          onvifPort: 9997, // MediaMTX's real config API — a real server, just not an ONVIF one
+        },
+      });
+      await prisma.cameraCapabilityRecord.create({
+        data: { cameraId: camera.id, supportTier: "UNSUPPORTED" },
+      });
+      // The RTSP probe needs the real stream's path, same as every other
+      // SIMULATED-fixture test — without this, buildRtspUrl has no path and
+      // the RTSP probe itself fails, which would mask what this test is
+      // actually checking (the ONVIF capability fallback, not RTSP).
+      const { encryptSecret } = await import("../lib/crypto.js");
+      const encrypted = encryptSecret(JSON.stringify({ path: "/simulated" }));
+      await prisma.cameraCredential.create({
+        data: { cameraId: camera.id, encryptedValue: encrypted.ciphertext, encryptionIv: encrypted.iv },
+      });
+
+      const testRes = await agent.post(`/cameras/${camera.id}/test-connection`);
+      expect(testRes.status).toBe(200);
+      // RTSP succeeded for real.
+      expect(testRes.body.ok).toBe(true);
+      expect(testRes.body.capability.liveView).toBe(true);
+      // The real ONVIF probe was attempted and failed cleanly (wrong
+      // protocol), so this must NOT be FULLY_SUPPORTED — no ONVIF-only
+      // capability may be claimed from a device that never confirmed it.
+      expect(testRes.body.supportTier).toBe("CONNECTED_MISSING_CAPABILITIES");
+      expect(testRes.body.capability.ptz).toBe(false);
+      expect(testRes.body.capability.zoom).toBe(false);
+      expect(testRes.body.capability.motionEvents).toBe(false);
+      expect(testRes.body.capability.imageSettings).toBe(false);
+      expect(testRes.body.capability.firmwareUpdate).toBe(false);
+    },
+    20000,
+  );
 });
 
 describe("POST /cameras/discover", () => {

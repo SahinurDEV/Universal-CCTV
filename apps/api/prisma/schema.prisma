@@ -1,0 +1,450 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy, users, access control
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  memberships      Membership[]
+  locations        Location[]
+  cameras          Camera[]
+  retentionPolicies RetentionPolicy[]
+  subscriptions    Subscription[]
+  usageRecords     UsageRecord[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  gatewayDevices   GatewayDevice[]
+  integrationConfigs IntegrationConfig[]
+  recordingSegments RecordingSegment[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  memberships  Membership[]
+  auditLogs    AuditLog[]
+  sessions     Session[]
+
+  @@map("users")
+}
+
+/// Opaque, DB-backed session tokens (not JWTs) so a session can actually be
+/// revoked on logout/compromise, per the security requirement — a bare JWT
+/// can't be invalidated server-side without a separate blocklist anyway, so
+/// this is simpler, not more complex, for that requirement.
+/// Only a SHA-256 hash of the token is stored; the raw token lives only in
+/// the httpOnly cookie on the client and is never persisted or logged.
+model Session {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  tokenHash       String    @unique @map("token_hash")
+  /// Which tenant this session is currently acting as. Nullable because a
+  /// freshly-registered user's first membership is set here immediately, but
+  /// the field stays nullable to support a future "pick a tenant" step for
+  /// users invited to zero tenants.
+  activeTenantId  String?   @map("active_tenant_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  lastUsedAt      DateTime  @default(now()) @map("last_used_at")
+  expiresAt       DateTime  @map("expires_at")
+  revokedAt       DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+/// Join table between User and Tenant. Role-based access control for MVP is a
+/// single enum per membership rather than a separate fine-grained permissions
+/// table — see docs/database-schema.md for the tradeoff.
+model Membership {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  role      Role
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+// ---------------------------------------------------------------------------
+// Locations and cameras
+// ---------------------------------------------------------------------------
+
+model Location {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  address   String?
+  timezone  String   @default("UTC")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cameras Camera[]
+
+  @@index([tenantId])
+  @@map("locations")
+}
+
+enum ConnectorType {
+  RTSP
+  ONVIF
+  SIMULATED
+}
+
+model Camera {
+  id            String        @id @default(uuid())
+  tenantId      String        @map("tenant_id")
+  locationId    String?       @map("location_id")
+  name          String
+  manufacturer  String?
+  model         String?
+  connectorType ConnectorType @map("connector_type")
+  host          String
+  port          Int
+  onvifPort     Int?          @map("onvif_port")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  tenant     Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location   Location?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  credential CameraCredential?
+  capability CameraCapabilityRecord?
+  sessions   CameraConnectionSession[]
+  recordingJobs    RecordingJob[]
+  recordingSegments RecordingSegment[]
+  retentionPolicy  RetentionPolicy? @relation(fields: [retentionPolicyId], references: [id])
+  retentionPolicyId String? @map("retention_policy_id")
+
+  @@index([tenantId])
+  @@index([locationId])
+  @@map("cameras")
+}
+
+/// Camera secrets (RTSP URL embeds username/password) are kept in their own
+/// table, separate from general camera metadata, and are never returned by any
+/// endpoint that lists/reads camera records for display. `encryptedValue` is
+/// AES-256-GCM ciphertext using a server-held key (CREDENTIAL_ENCRYPTION_KEY) —
+/// see docs/security.md. A dedicated secrets manager (Vault/AWS Secrets Manager)
+/// is the recommended production upgrade; documented as a tradeoff, not built
+/// for MVP to avoid an unnecessary external dependency this early.
+model CameraCredential {
+  id              String   @id @default(uuid())
+  cameraId        String   @unique @map("camera_id")
+  encryptedValue  String   @map("encrypted_value")
+  encryptionIv    String   @map("encryption_iv")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+
+  @@map("camera_credentials")
+}
+
+enum SupportTier {
+  FULLY_SUPPORTED
+  PARTIALLY_SUPPORTED
+  CONNECTED_MISSING_CAPABILITIES
+  UNSUPPORTED
+}
+
+/// Written only by the capability-detection flow (CameraConnector.detectCapabilities).
+/// Never hand-edited to mark a camera as more capable than it tested.
+model CameraCapabilityRecord {
+  id               String      @id @default(uuid())
+  cameraId         String      @unique @map("camera_id")
+  supportTier      SupportTier @map("support_tier")
+  liveView         Boolean     @default(false)
+  cloudRecording   Boolean     @default(false)
+  playback         Boolean     @default(false)
+  ptz              Boolean     @default(false)
+  zoom             Boolean     @default(false)
+  motionEvents     Boolean     @default(false) @map("motion_events")
+  imageSettings    Boolean     @default(false) @map("image_settings")
+  audio            Boolean     @default(false)
+  firmwareUpdate   Boolean     @default(false) @map("firmware_update")
+  detectedAt       DateTime    @default(now()) @map("detected_at")
+
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+
+  @@map("camera_capabilities")
+}
+
+enum ConnectionStatusValue {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  UNKNOWN
+}
+
+/// History of connection attempts/status changes, used for health monitoring,
+/// offline notifications, and debugging. Not the same as a recording job.
+model CameraConnectionSession {
+  id        String                @id @default(uuid())
+  cameraId  String                @map("camera_id")
+  status    ConnectionStatusValue
+  errorMessage String?            @map("error_message")
+  startedAt DateTime              @default(now()) @map("started_at")
+  endedAt   DateTime?             @map("ended_at")
+
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+
+  @@index([cameraId, startedAt])
+  @@map("camera_connection_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Recording pipeline
+// ---------------------------------------------------------------------------
+
+enum RecordingJobStatus {
+  PENDING
+  RUNNING
+  STOPPED
+  FAILED
+}
+
+/// At most one non-STOPPED/FAILED job per camera is enforced at the application
+/// layer (transaction + unique partial index via raw SQL migration) to prevent
+/// duplicate ffmpeg processes recording the same camera twice.
+model RecordingJob {
+  id          String             @id @default(uuid())
+  cameraId    String             @map("camera_id")
+  tenantId    String             @map("tenant_id")
+  status      RecordingJobStatus @default(PENDING)
+  workerId    String?            @map("worker_id")
+  startedAt   DateTime?          @map("started_at")
+  stoppedAt   DateTime?          @map("stopped_at")
+  lastError   String?            @map("last_error")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  camera   Camera             @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  segments RecordingSegment[]
+
+  @@index([cameraId, status])
+  @@index([tenantId])
+  @@map("recording_jobs")
+}
+
+enum SegmentStatus {
+  RECORDING
+  COMPLETE
+  UPLOAD_FAILED
+  EXPIRED
+  DELETED
+}
+
+model RecordingSegment {
+  id          String        @id @default(uuid())
+  tenantId    String        @map("tenant_id")
+  cameraId    String        @map("camera_id")
+  jobId       String        @map("job_id")
+  startedAt   DateTime      @map("started_at")
+  endedAt     DateTime?     @map("ended_at")
+  durationSec Int?          @map("duration_sec")
+  objectKey   String        @unique @map("object_key")
+  fileSizeBytes BigInt?     @map("file_size_bytes")
+  status      SegmentStatus @default(RECORDING)
+  integrityVerifiedAt DateTime? @map("integrity_verified_at")
+  retentionExpiresAt  DateTime? @map("retention_expires_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  camera Camera       @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  job    RecordingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([cameraId, startedAt])
+  @@index([tenantId])
+  @@index([status, retentionExpiresAt])
+  @@map("recording_segments")
+}
+
+model RetentionPolicy {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  name           String
+  retentionDays  Int
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cameras Camera[]
+
+  @@index([tenantId])
+  @@map("retention_policies")
+}
+
+// ---------------------------------------------------------------------------
+// Subscriptions / billing
+// ---------------------------------------------------------------------------
+
+model SubscriptionPlan {
+  id               String   @id @default(uuid())
+  key              String   @unique
+  name             String
+  cameraLimit      Int      @map("camera_limit")
+  storageQuotaGb   Int      @map("storage_quota_gb")
+  maxRetentionDays Int      @map("max_retention_days")
+  priceCentsMonthly Int     @map("price_cents_monthly")
+  isActive         Boolean  @default(true) @map("is_active")
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+model Subscription {
+  id                 String             @id @default(uuid())
+  tenantId           String             @unique @map("tenant_id")
+  planId             String             @map("plan_id")
+  status             SubscriptionStatus @default(TRIALING)
+  billingProvider    String             @default("dev") @map("billing_provider")
+  externalCustomerId String?            @map("external_customer_id")
+  currentPeriodEnd   DateTime?          @map("current_period_end")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model UsageRecord {
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  periodStart      DateTime @map("period_start")
+  periodEnd        DateTime @map("period_end")
+  storageBytesUsed BigInt   @map("storage_bytes_used")
+  cameraCount      Int      @map("camera_count")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, periodStart])
+  @@map("usage_records")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications / audit / gateways / integrations
+// ---------------------------------------------------------------------------
+
+enum NotificationType {
+  CAMERA_OFFLINE
+  RECORDING_STOPPED
+  STORAGE_QUOTA_WARNING
+  UPLOAD_FAILURE
+  RETENTION_CLEANUP_FAILURE
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  tenantId  String           @map("tenant_id")
+  type      NotificationType
+  message   String
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  actorUserId String? @map("actor_user_id")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+enum GatewayStatus {
+  PENDING_ENROLLMENT
+  ONLINE
+  OFFLINE
+  REVOKED
+}
+
+/// Placeholder for the Go local gateway agent (docs/architecture.md §6), not yet
+/// implemented. Table exists now so the enrollment/heartbeat data model is
+/// settled before that phase starts.
+model GatewayDevice {
+  id              String        @id @default(uuid())
+  tenantId        String        @map("tenant_id")
+  name            String
+  status          GatewayStatus @default(PENDING_ENROLLMENT)
+  publicKey       String?       @map("public_key")
+  lastHeartbeatAt DateTime?     @map("last_heartbeat_at")
+  enrolledAt      DateTime?     @map("enrolled_at")
+  revokedAt       DateTime?     @map("revoked_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("gateway_devices")
+}
+
+/// Config for future manufacturer-API connectors (section 6/7). No provider is
+/// implemented yet; this only reserves the data model.
+model IntegrationConfig {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  provider  String
+  config    Json
+  isEnabled Boolean  @default(false) @map("is_enabled")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("integration_configs")
+}

@@ -1,0 +1,17 @@
+{
+  "name": "universal-cctv-platform",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @cctv/api dev",
+    "dev:web": "pnpm --filter @cctv/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "prisma:generate": "pnpm --filter @cctv/api prisma:generate",
+    "prisma:migrate": "pnpm --filter @cctv/api prisma:migrate"
+  }
+}

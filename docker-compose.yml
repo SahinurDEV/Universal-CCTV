@@ -1,0 +1,82 @@
+name: cctv-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cctv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cctv_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cctv}
+    ports:
+      # Host port 5433, not 5432: this machine already has a native Postgres
+      # service bound to 5432 outside Docker. Container-internal port stays
+      # 5432 (only the host-side mapping changes).
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cctv}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # NOTE: the spec's recommended local dev store is MinIO, but as of this
+  # environment Docker Hub rejects anonymous pulls of minio/minio and minio/mc
+  # ("pull access denied") following MinIO's Nov-2024 restriction of their
+  # public container images. LocalStack's S3 service is a drop-in substitute
+  # for local dev only — the application only ever talks to the generic AWS S3
+  # SDK/API, so no app code changes with this swap, and production still
+  # targets real AWS S3. See docs/storage-costs.md and docs/architecture.md §7.
+  s3:
+    image: localstack/localstack:3
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: ${STORAGE_REGION:-us-east-1}
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: creates the recordings bucket so the api doesn't have to carry
+  # bucket-provisioning logic. Exits after running; `docker compose up` will
+  # show it as "exited (0)", which is expected.
+  s3-init:
+    image: amazon/aws-cli:2.17.62
+    depends_on:
+      s3:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${STORAGE_SECRET_ACCESS_KEY:-test}
+      AWS_DEFAULT_REGION: ${STORAGE_REGION:-us-east-1}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        aws --endpoint-url=http://s3:4566 s3 mb s3://${STORAGE_BUCKET:-cctv-recordings} || true
+
+volumes:
+  postgres-data:
+  localstack-data:
+
+# apps/api and apps/web are run locally with `pnpm dev:api` / `pnpm dev:web`
+# against these services for now (see README.md). Containerizing the app
+# services themselves is tracked for Phase 9 (production readiness) once the
+# apps have real functionality worth shipping in an image.

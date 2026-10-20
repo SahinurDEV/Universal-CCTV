@@ -177,8 +177,8 @@ describe("retention policies", () => {
       expect(await s3ObjectExists(noPolicyKey)).toBe(true);
 
       // Clean up the still-existing object this test intentionally left behind.
-      const { deleteRecordingSegment } = await import("../lib/storage.js");
-      await deleteRecordingSegment(noPolicyKey);
+      const { deleteStorageObject } = await import("../lib/storage.js");
+      await deleteStorageObject(noPolicyKey);
     },
     15000,
   );

@@ -28,10 +28,13 @@
 - **Known gap in the test suite itself**: `afterAll` only deletes DB rows —
   it does not delete the S3 objects the recording tests upload to
   LocalStack. Running `test:integration` repeatedly accumulates objects in
-  the `cctv-recordings` bucket. This mirrors the product's own current gap
-  (no orphaned-object cleanup until Phase 7) rather than hiding it; if you
-  need a clean bucket, `docker compose down -v` or manually `aws s3 rm
-  --recursive` against it.
+  the `cctv-recordings` bucket (each one now a real orphan, since its DB
+  row was just cascaded away — exactly the scenario
+  `recording/reconciliation.ts` exists to clean up; a running worker will
+  actually remove these once they pass the 15-minute age threshold, but
+  the test suite itself doesn't wait for or rely on that). If you need a
+  clean bucket immediately, `docker compose down -v` or manually `aws s3
+  rm --recursive` against it.
 
 Run both locally before considering a change to `apps/api` done:
 
@@ -145,6 +148,17 @@ pnpm --filter @cctv/api test:integration
   confirm the cooldown holds on a second tick, confirm recovery) was
   repeated manually end-to-end and behaves identically to before the
   change. See docs/deployment.md's "Resource consumption" section.
+- **Storage reconciliation** (`reconciliation.integration.test.ts`):
+  `reconcileOrphanedObjects()` against the real bucket — a real orphan
+  (no DB row) gets deleted, a real owned object (matching row) is left
+  alone, and an orphan younger than the age threshold is left alone too
+  (the in-flight-upload safety window). Beyond the automated test: deleted
+  a real camera with two real recorded segments through the live API,
+  confirmed via direct queries that the DB rows cascaded away but both S3
+  objects remained (reproducing the actual bug — camera deletion orphans
+  100% of its footage, not occasionally), then ran the real reconciliation
+  function and confirmed via `HeadObjectCommand` that both were deleted.
+  See docs/retention-and-storage.md.
 - **Security review** (two-pass, per the `security-review` skill's own
   methodology — identify, then independently verify each finding): found
   and confirmed two real vulnerabilities (SSRF guard bypass via
@@ -161,8 +175,6 @@ pnpm --filter @cctv/api test:integration
 - Notification delivery beyond the in-app list (no email/SMS/webhook), and
   per-frame camera health metrics beyond offline/stopped detection — see
   docs/monitoring-and-alerts.md.
-- Storage reconciliation / orphaned-object cleanup — see
-  docs/retention-and-storage.md.
 - HLS/adaptive playback and cross-segment scrubbing — MVP is direct MP4
   segment playback with Previous/Next between segments, per
   docs/playback.md.

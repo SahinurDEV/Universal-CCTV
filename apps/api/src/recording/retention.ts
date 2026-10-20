@@ -1,6 +1,6 @@
 import { prisma } from "../lib/db.js";
 import { logger } from "../lib/logger.js";
-import { deleteRecordingSegment } from "../lib/storage.js";
+import { deleteStorageObject } from "../lib/storage.js";
 import { writeAuditLog } from "../lib/audit.js";
 
 export interface RetentionResult {
@@ -48,7 +48,7 @@ export async function enforceRetention(): Promise<RetentionResult> {
 
   for (const segment of toDelete) {
     try {
-      await deleteRecordingSegment(segment.objectKey);
+      await deleteStorageObject(segment.objectKey);
       await prisma.recordingSegment.update({
         where: { id: segment.id },
         data: { status: "DELETED" },

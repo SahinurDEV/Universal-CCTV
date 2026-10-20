@@ -64,19 +64,47 @@ match) and against a second tenant seeing zero (not this tenant's numbers).
 Feeds the Overview page's "Storage used" tile and the dedicated Storage
 page's per-camera breakdown.
 
+Per-tenant storage *quota enforcement* (blocking a new recording once a
+plan's limit is reached) lives in the subscription/billing layer, not
+here — see docs/subscriptions-and-billing.md.
+
+## Storage reconciliation / orphaned-object cleanup
+
+**Built.** `recording/reconciliation.ts`'s `reconcileOrphanedObjects()`,
+run on a BullMQ schedule in `worker.ts` (every 5 minutes in this local dev
+setup — same "short for observability" tradeoff as the other jobs).
+
+The real root cause this closes, found by reading the schema rather than
+guessing: `DELETE /cameras/:id` cascades away every `RecordingSegment` row
+for that camera (Prisma `onDelete: Cascade` on the `camera` relation) but
+never touches the camera's S3 objects — so deleting a camera orphans 100%
+of its recorded footage immediately, not just occasionally. A second,
+narrower source exists too: `ingest.ts` uploads to S3 *before* writing the
+DB row, so a crash in that window orphans the upload (the retry generates
+a fresh object key for the same segment, rather than reusing the orphaned
+one).
+
+The job lists every object under the bucket's `tenants/` prefix,
+cross-references each one's key against `recording_segments.object_key`
+in bulk (chunked `IN` queries, not one query per object), and deletes
+anything with no matching row — regardless of that row's status, since
+even a `DELETED` row means something already owns that key's lifecycle.
+Objects younger than 15 minutes (`ORPHAN_MIN_AGE_MS`) are never touched,
+so an upload that's genuinely mid-ingest (DB write about to land) can
+never be mistaken for an orphan.
+
+**Verified for real**, not just via the automated test
+(`reconciliation.integration.test.ts`): recorded two real segments for a
+real camera, deleted that camera through the live API, confirmed via a
+direct Prisma query that both `RecordingSegment` rows were gone and via
+`HeadObjectCommand` that both S3 objects still existed (reproducing the
+bug), then ran `reconcileOrphanedObjects` against the live stack and
+confirmed via `HeadObjectCommand` again that both objects were actually
+deleted.
+
 ## What's not implemented
 
-- **Storage reconciliation / orphaned-object cleanup**: an object that
-  exists in S3 with no corresponding DB row (e.g. from a crash between
-  upload and DB write — though `ingest.ts`'s ordering already minimizes
-  this window) is never detected or cleaned up. Tracked, not built.
-- **Storage quotas**: nothing enforces a per-tenant storage limit or warns
-  as one is approached — that depends on the subscription/billing layer
-  (Phase 8), which doesn't exist yet.
 - **Per-camera retention estimate before enabling long retention**
   (docs/requirements.md §10's "show users an estimate" requirement) — not
   built; the storage calculator formula exists only as a worked example in
   docs/foundation-assessment.md §8, not as a real tool.
-- Deleting a camera does **not** clean up its recordings' S3 objects or
-  retention-expire them early — this was already a documented gap before
-  Phase 7 and retention enforcement doesn't change it.

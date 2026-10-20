@@ -7,6 +7,7 @@ import { logger } from "./lib/logger.js";
 import { drainPendingSegments } from "./recording/ingest.js";
 import { enforceRetention } from "./recording/retention.js";
 import { checkCameraHealth, checkStorageQuotaWarnings } from "./recording/health.js";
+import { reconcileOrphanedObjects } from "./recording/reconciliation.js";
 import { notifyOnce } from "./lib/notifications.js";
 
 loadEnv();
@@ -18,6 +19,9 @@ const POLL_INTERVAL_MS = 15_000;
 // observable in local dev/testing without an artificial wait.
 const RETENTION_INTERVAL_MS = 60_000;
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
+// Same tradeoff as above — a real deployment has no need to scan the whole
+// bucket this often; short here purely for dev-loop observability.
+const RECONCILIATION_INTERVAL_MS = 5 * 60_000;
 
 const queue = new Queue(QUEUE_NAME, { connection: redis });
 
@@ -95,6 +99,11 @@ const worker = new Worker(
         logger.info(healthResult, "camera health check run");
       }
       await checkStorageQuotaWarnings();
+    } else if (job.name === "reconcile-storage") {
+      const result = await reconcileOrphanedObjects();
+      if (result.orphaned > 0 || result.failed > 0) {
+        logger.info(result, "storage reconciliation run");
+      }
     }
   },
   { connection: redis },
@@ -108,11 +117,13 @@ async function start() {
   await queue.add("poll", {}, { repeat: { every: POLL_INTERVAL_MS }, jobId: "poll-recordings" });
   await queue.add("retention", {}, { repeat: { every: RETENTION_INTERVAL_MS }, jobId: "enforce-retention" });
   await queue.add("health-check", {}, { repeat: { every: HEALTH_CHECK_INTERVAL_MS }, jobId: "camera-health-check" });
+  await queue.add("reconcile-storage", {}, { repeat: { every: RECONCILIATION_INTERVAL_MS }, jobId: "reconcile-storage" });
   logger.info(
     {
       pollIntervalMs: POLL_INTERVAL_MS,
       retentionIntervalMs: RETENTION_INTERVAL_MS,
       healthCheckIntervalMs: HEALTH_CHECK_INTERVAL_MS,
+      reconciliationIntervalMs: RECONCILIATION_INTERVAL_MS,
     },
     "recording ingestion worker started",
   );

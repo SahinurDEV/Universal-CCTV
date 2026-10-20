@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { loadEnv } from "../env.js";
 
@@ -72,12 +72,49 @@ export async function getSignedPlaybackUrl(
 }
 
 /**
- * Permanently deletes a recording's object. Only ever called by retention
- * enforcement (recording/retention.ts) after the DB has already marked the
- * segment EXPIRED — deleting here is the point of no return, so callers
- * must have already decided the deletion is authorized before reaching this.
+ * Permanently deletes one object by key. Deleting here is the point of no
+ * return — callers (retention enforcement, orphan reconciliation) must have
+ * already decided the deletion is authorized before reaching this; this
+ * function has no opinion on why.
  */
-export async function deleteRecordingSegment(objectKey: string): Promise<void> {
+export async function deleteStorageObject(objectKey: string): Promise<void> {
   const env = loadEnv();
   await getClient().send(new DeleteObjectCommand({ Bucket: env.STORAGE_BUCKET, Key: objectKey }));
+}
+
+export interface StorageObjectRef {
+  key: string;
+  lastModified: Date;
+  sizeBytes: number;
+}
+
+/**
+ * Every recording object lives under `tenants/...` (see
+ * `buildRecordingObjectKey`) — listing with that prefix is both a minor
+ * efficiency win and a safety net against ever touching an unrelated object
+ * if the bucket were ever reused for something else. Paginates via
+ * `ContinuationToken` since a real deployment's object count can exceed one
+ * `ListObjectsV2` page (1000 keys).
+ */
+export async function listAllRecordingObjects(): Promise<StorageObjectRef[]> {
+  const env = loadEnv();
+  const objects: StorageObjectRef[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const res = await getClient().send(
+      new ListObjectsV2Command({
+        Bucket: env.STORAGE_BUCKET,
+        Prefix: "tenants/",
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const obj of res.Contents ?? []) {
+      if (!obj.Key || !obj.LastModified) continue;
+      objects.push({ key: obj.Key, lastModified: obj.LastModified, sizeBytes: obj.Size ?? 0 });
+    }
+    continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return objects;
 }

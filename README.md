@@ -121,21 +121,29 @@ docs/deployment.md for running this anywhere but here.
   reverified against the real containers, including confirming the exact
   same process survives an outage and self-heals once the dependency
   returns, with no restart. See docs/failure-recovery.md.
-- Test suite: 9 unit tests + 53 integration tests (auth lifecycle, tenant
+- **Storage reconciliation**: deleting a camera was found to orphan 100%
+  of its recorded footage immediately (cascades the DB rows away, never
+  touches S3) — confirmed for real by deleting a camera with real
+  recordings and checking both the DB and S3 directly. A background job
+  now finds and removes any object with no matching DB row (with a
+  15-minute safety window so an in-flight upload is never mistaken for an
+  orphan), reverified against the same real scenario afterward. See
+  docs/retention-and-storage.md.
+- Test suite: 9 unit tests + 54 integration tests (auth lifecycle, tenant
   isolation, RBAC, SSRF guard, credential confidentiality, real RTSP
   connection testing, ONVIF discovery, real recording start/stop with S3
   verification, real playback with byte-exact verification, real retention
   enforcement and storage accounting, subscription lifecycle and quota
   enforcement, notification dedup and real camera health checks, async
-  error handling under a simulated DB failure) — see docs/testing.md.
+  error handling under a simulated DB failure, orphaned-object
+  reconciliation) — see docs/testing.md.
 
 Not yet implemented: a real payment provider, payment failure handling,
 email sending (verification/password-reset), real ONVIF capability
 confirmation beyond discovery (PTZ, motion events, etc.), motion-based
-recording, HLS/adaptive playback, orphaned-object cleanup, historical usage
-snapshots, notification delivery beyond the in-app list (no email/SMS/
-webhook). See docs/requirements.md §3 and docs/testing.md for the explicit
-list.
+recording, HLS/adaptive playback, historical usage snapshots, notification
+delivery beyond the in-app list (no email/SMS/webhook). See
+docs/requirements.md §3 and docs/testing.md for the explicit list.
 
 ## Prerequisites
 

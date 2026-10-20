@@ -14,6 +14,7 @@
 | Cloud Storage Service | Object storage abstraction | **Implemented** — `apps/api/src/lib/storage.ts`, AWS SDK v3, LocalStack (dev) / AWS S3 (prod) |
 | Recording Metadata DB | Segment/job/retention metadata | PostgreSQL + Prisma |
 | Retention Enforcement | Expire + delete segments past policy, storage usage accounting | **Implemented** — `apps/api/src/recording/retention.ts` (BullMQ job in `worker.ts`), `GET /storage/usage`; see docs/retention-and-storage.md |
+| Storage Reconciliation | Find and delete S3 objects with no matching DB row (orphaned by a deleted camera or a crash mid-ingest) | **Implemented** — `apps/api/src/recording/reconciliation.ts` (BullMQ job in `worker.ts`); see docs/retention-and-storage.md |
 | Subscription & Billing Service | Plans, quotas, billing adapter | **Implemented** (dev adapter only, no real payment provider) — `apps/api/src/billing/provider.ts`, `apps/api/src/lib/quota.ts`; see docs/subscriptions-and-billing.md |
 | Notification Service | Health alerts, quota alerts | **Implemented** (in-app only, no email/SMS/webhook adapter) — `apps/api/src/lib/notifications.ts` (dedup chokepoint), `apps/api/src/recording/health.ts`, a 30s BullMQ health-check job in `worker.ts`; see docs/monitoring-and-alerts.md |
 | Local Gateway Agent | LAN camera discovery, outbound tunnel to cloud | **Go** — static binary, cross-platform (see §6) |

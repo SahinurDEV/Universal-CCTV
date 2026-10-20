@@ -358,9 +358,10 @@ camerasRouter.delete("/:id", requireRole("OWNER", "ADMIN"), asyncHandler(async (
     targetId: existing.id,
   });
 
-  // NOTE: this does not delete any S3 objects for the camera's recording
-  // segments — orphaned-object cleanup is Phase 7 (retention/storage) work,
-  // not implemented yet. Deleting a camera today can orphan stored video.
+  // This cascades away every RecordingSegment row for the camera (Prisma
+  // onDelete: Cascade) but never touches the backing S3 objects directly —
+  // recording/reconciliation.ts's background job is what actually cleans
+  // those up, on a delay (ORPHAN_MIN_AGE_MS), not synchronously here.
   res.status(204).send();
 }));
 

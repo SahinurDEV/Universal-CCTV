@@ -57,6 +57,21 @@ class FakeApi extends ApiClient {
   @override
   Future<String> startLive(String id) async => throw ApiException(503, 'live_unavailable', 'no stream in tests');
 
+  PtzInfo ptzInfo = const PtzInfo(supported: true, zoom: true, canControl: true, presets: [PtzPreset(token: 'p1', name: 'Gate')]);
+
+  @override
+  Future<PtzInfo> ptz(String id) async => ptzInfo;
+
+  @override
+  Future<void> ptzMove(String id, {double x = 0, double y = 0, double zoom = 0, int timeoutMs = 1500}) async =>
+      calls.add('ptz:move:$x:$y:$zoom');
+
+  @override
+  Future<void> ptzStop(String id) async => calls.add('ptz:stop');
+
+  @override
+  Future<void> ptzGotoPreset(String id, String token) async => calls.add('ptz:goto:$token');
+
   @override
   Future<MotionSettings> motionSettings(String id) async => motion;
 

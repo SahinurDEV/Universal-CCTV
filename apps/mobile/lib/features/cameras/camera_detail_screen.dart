@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../live/live_player.dart';
+import '../live/ptz_controls.dart';
 
 class CameraDetailScreen extends ConsumerWidget {
   const CameraDetailScreen({super.key, required this.cameraId});
@@ -25,11 +26,11 @@ class CameraDetailScreen extends ConsumerWidget {
           final info = _CameraInfo(camera: c);
           if (context.isWide) {
             return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(16), child: player)),
+              Expanded(flex: 3, child: ListView(padding: const EdgeInsets.all(16), children: [player, PtzControls(cameraId: c.id)])),
               Expanded(flex: 2, child: ListView(children: [info])),
             ]);
           }
-          return ListView(children: [player, info]);
+          return ListView(children: [player, PtzControls(cameraId: c.id), info]);
         },
       ),
     );

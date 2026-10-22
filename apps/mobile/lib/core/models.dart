@@ -240,3 +240,26 @@ String notificationTypeLabel(String type) => switch (type) {
       'VEHICLE_DETECTED' => 'Vehicle',
       _ => type,
     };
+
+class PtzPreset {
+  const PtzPreset({required this.token, required this.name});
+  final String token;
+  final String name;
+  factory PtzPreset.fromJson(Map<String, dynamic> j) => PtzPreset(token: j['token'] as String, name: j['name'] as String);
+}
+
+/// PTZ support for one camera. `supported` comes from the server's ONVIF
+/// capability probe; `canControl` is Operator and above.
+class PtzInfo {
+  const PtzInfo({required this.supported, required this.zoom, required this.canControl, this.presets = const []});
+  final bool supported;
+  final bool zoom;
+  final bool canControl;
+  final List<PtzPreset> presets;
+  factory PtzInfo.fromJson(Map<String, dynamic> j) => PtzInfo(
+        supported: j['supported'] as bool? ?? false,
+        zoom: j['zoom'] as bool? ?? false,
+        canControl: j['canControl'] as bool? ?? false,
+        presets: [for (final p in (j['presets'] as List? ?? const [])) PtzPreset.fromJson(p as Map<String, dynamic>)],
+      );
+}

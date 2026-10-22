@@ -40,6 +40,12 @@ docs/deployment.md for running this anywhere but here.
   tablet layouts. Backed by a new `POST /auth/mobile/login` bearer-token
   mode and `/push/fcm/*` endpoints. See docs/mobile-app.md.
 
+- **PTZ & two-way audio**: ONVIF pan/tilt/zoom with presets in the web and
+  mobile live views (only for cameras that report PTZ), push-to-talk through
+  the ONVIF RTSP audio backchannel (G.711, web only), Operator+ only,
+  rate-limited and audit-logged. Tested against bundled ONVIF/RTSP
+  simulators; limits are listed honestly in docs/ptz-audio.md.
+
 - **People & vehicle detection**: when motion fires, a snapshot is taken and
   run through SSD MobileNet v1 (COCO, Apache-2.0) on CPU via
   onnxruntime-node; per-camera alert classes (person / vehicle / any);

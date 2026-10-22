@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LivePlayer } from "@/components/LivePlayer";
 import { MotionPanel } from "@/components/MotionPanel";
+import { PtzPanel } from "@/components/PtzPanel";
 import { useSession } from "@/lib/useSession";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -193,6 +194,7 @@ export default function CameraDetailPage() {
       </div>
 
       <LivePlayer cameraId={camera.id} name={`${camera.name} — live`} />
+      <PtzPanel cameraId={camera.id} />
 
       {testError && <p className="text-sm text-red-400">{testError}</p>}
 

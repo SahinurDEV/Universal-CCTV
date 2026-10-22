@@ -121,6 +121,17 @@ class ApiClient {
     return resolve(j['playlistUrl'] as String);
   }
 
+  Future<PtzInfo> ptz(String id) async => PtzInfo.fromJson(await _json('GET', '/cameras/$id/ptz'));
+
+  /// Velocities -1..1. The camera stops by itself after [timeoutMs].
+  Future<void> ptzMove(String id, {double x = 0, double y = 0, double zoom = 0, int timeoutMs = 1500}) =>
+      _req('POST', '/cameras/$id/ptz/move', data: {'x': x, 'y': y, 'zoom': zoom, 'timeoutMs': timeoutMs});
+
+  Future<void> ptzStop(String id) => _req('POST', '/cameras/$id/ptz/stop', data: const <String, dynamic>{});
+
+  Future<void> ptzGotoPreset(String id, String token) =>
+      _req('POST', '/cameras/$id/ptz/presets/${Uri.encodeComponent(token)}/goto', data: const <String, dynamic>{});
+
   Future<MotionSettings> motionSettings(String id) async =>
       MotionSettings.fromJson(await _json('GET', '/cameras/$id/motion'));
 

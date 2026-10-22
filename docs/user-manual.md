@@ -152,6 +152,24 @@ You can also watch a single camera on its own page (Cameras → click the
 camera). Cameras only connect while someone is watching (unless they are
 recording), which saves data.
 
+### 5.1 Moving a PTZ camera and talking through it
+
+If your camera can pan, tilt or zoom over ONVIF, run **Test connection** on its
+page once. When the camera reports PTZ, arrows and zoom buttons appear under
+the live video (web and phone). **Hold** an arrow to move and let go to stop.
+To remember a position, type a name and click **Save position**; click the
+preset later to go back there.
+
+If the camera has a speaker and supports ONVIF two-way audio, a **Hold to
+talk** button appears on the web page. Hold it, speak, and let go — your
+message plays on the camera a moment later (up to 30 seconds per message).
+It is a walkie-talkie, not a phone call. Many cameras that have their own
+"two-way audio" app do not support the ONVIF method; for those the button
+does not appear.
+
+Only Operators, Admins and Owners can move a camera or talk; Viewers just
+see the video. Every move and message is recorded in the audit log.
+
 ---
 
 ## 6. Recording and playback

@@ -67,3 +67,23 @@ All routes are under `/platform-admin` and need `requireAuth` + `requirePlatform
 `/auth/me` returns `user.isPlatformAdmin`, and `suspended` on each workspace.
 
 Tests: `apps/api/src/routes/platform-admin.integration.test.ts` and `src/lib/platform-admin.test.ts`.
+
+## Dashboard UI
+
+`/dashboard/admin` opens a full-screen admin console (sidebar navigation,
+light/dark toggle remembered in `localStorage["admin-theme"]`, responsive with
+a slide-out menu on phones):
+
+- **Overview**: KPI cards (workspaces, users, cameras, storage, alerts, active
+  sessions) with week-over-week trend badges, and charts for cameras, storage
+  and daily alerts/recordings over 7/30/90 days, from
+  `GET /platform-admin/timeseries?days=7..90` (UTC days; cameras and storage
+  are running totals, the rest per-day counts; trends compare the last 7 days
+  with the previous 7).
+- **Workspaces / Users / Cameras**: searchable tables with status filters
+  (`status=all|active|suspended`), a camera type filter (`type=RTSP|ONVIF|SIMULATED`),
+  avatars, status/role badges and numbered pagination. Suspending opens a
+  dialog that requires a reason.
+- **Audit log**: every admin action, newest first.
+
+Charts use `recharts` (MIT) and icons `lucide-react` (ISC).

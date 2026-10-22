@@ -22,7 +22,12 @@ const listQuery = z.object({
   q: z.string().trim().max(200).optional(),
   page: z.coerce.number().int().min(1).max(10000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  status: z.enum(["all", "active", "suspended"]).default("all"),
+  type: z.enum(["RTSP", "ONVIF", "SIMULATED"]).optional(),
 });
+function suspendedFilter(status: "all" | "active" | "suspended") {
+  return status === "all" ? {} : { suspendedAt: status === "suspended" ? { not: null } : null };
+}
 const reasonSchema = z.object({
   reason: z
     .string()
@@ -73,11 +78,66 @@ platformAdminRouter.get("/stats", asyncHandler(async (_req, res) => {
   });
 }));
 
+/**
+ * Daily usage series for the dashboard charts (UTC days, oldest first).
+ * cameras/storageBytes are running totals at the end of each day; alerts,
+ * recordings and newUsers are per-day counts. Trend fields compare the last
+ * 7 days with the 7 before.
+ */
+const seriesQuery = z.object({ days: z.coerce.number().int().min(7).max(90).default(30) });
+platformAdminRouter.get("/timeseries", asyncHandler(async (req, res) => {
+  const q = seriesQuery.safeParse(req.query);
+  if (!q.success) return res.status(400).json({ error: "invalid_request" });
+  const days = q.data.days;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const start = new Date(today.getTime() - (days - 1) * 86400_000);
+  type Row = { day: Date; n: bigint | number | null };
+  const [camerasBefore, storageBefore, camRows, storageRows, alertRows, recRows, userRows] = await Promise.all([
+    prisma.camera.count({ where: { createdAt: { lt: start } } }),
+    prisma.recordingSegment.aggregate({ where: { status: "COMPLETE", startedAt: { lt: start } }, _sum: { fileSizeBytes: true } }),
+    prisma.$queryRaw<Row[]>`SELECT date_trunc('day', created_at AT TIME ZONE 'UTC') AS day, count(*) AS n FROM cameras WHERE created_at >= ${start} GROUP BY 1`,
+    prisma.$queryRaw<Row[]>`SELECT date_trunc('day', started_at AT TIME ZONE 'UTC') AS day, sum(file_size_bytes) AS n FROM recording_segments WHERE status = 'COMPLETE' AND started_at >= ${start} GROUP BY 1`,
+    prisma.$queryRaw<Row[]>`SELECT date_trunc('day', created_at AT TIME ZONE 'UTC') AS day, count(*) AS n FROM notifications WHERE created_at >= ${start} GROUP BY 1`,
+    prisma.$queryRaw<Row[]>`SELECT date_trunc('day', started_at AT TIME ZONE 'UTC') AS day, count(*) AS n FROM recording_segments WHERE status = 'COMPLETE' AND started_at >= ${start} GROUP BY 1`,
+    prisma.$queryRaw<Row[]>`SELECT date_trunc('day', created_at AT TIME ZONE 'UTC') AS day, count(*) AS n FROM users WHERE created_at >= ${start} GROUP BY 1`,
+  ]);
+  const toMap = (rows: Row[]) => new Map(rows.map((r) => [new Date(r.day).toISOString().slice(0, 10), Number(r.n ?? 0)]));
+  const [cm, sm, am, rm, um] = [camRows, storageRows, alertRows, recRows, userRows].map(toMap);
+  let cams = camerasBefore;
+  let bytes = Number(storageBefore._sum.fileSizeBytes ?? 0n);
+  const points: { day: string; cameras: number; storageBytes: number; alerts: number; recordings: number; newUsers: number }[] = [];
+  for (let i = 0; i < days; i++) {
+    const day = new Date(start.getTime() + i * 86400_000).toISOString().slice(0, 10);
+    cams += cm!.get(day) ?? 0;
+    bytes += sm!.get(day) ?? 0;
+    points.push({ day, cameras: cams, storageBytes: bytes, alerts: am!.get(day) ?? 0, recordings: rm!.get(day) ?? 0, newUsers: um!.get(day) ?? 0 });
+  }
+  const sum = (k: "alerts" | "recordings" | "newUsers", from: number, to: number) => points.slice(from, to).reduce((a, p) => a + p[k], 0);
+  const n = points.length;
+  const delta = (cur: number, prev: number) => (prev === 0 ? (cur === 0 ? 0 : null) : Math.round(((cur - prev) / prev) * 1000) / 10);
+  const at = (i: number) => points[Math.max(0, i)]!;
+  res.json({
+    days,
+    points,
+    trends: {
+      cameras: delta(at(n - 1).cameras - at(n - 8).cameras, at(n - 8).cameras - at(n - 15).cameras),
+      storage: delta(at(n - 1).storageBytes - at(n - 8).storageBytes, at(n - 8).storageBytes - at(n - 15).storageBytes),
+      alerts: delta(sum("alerts", n - 7, n), sum("alerts", n - 14, n - 7)),
+      recordings: delta(sum("recordings", n - 7, n), sum("recordings", n - 14, n - 7)),
+      users: delta(sum("newUsers", n - 7, n), sum("newUsers", n - 14, n - 7)),
+    },
+  });
+}));
+
 platformAdminRouter.get("/tenants", asyncHandler(async (req, res) => {
   const q = listQuery.safeParse(req.query);
   if (!q.success) return res.status(400).json({ error: "invalid_request", details: q.error.issues });
   const { q: search, page, pageSize } = q.data;
-  const where: Prisma.TenantWhereInput = search ? { name: { contains: search, mode: "insensitive" } } : {};
+  const where: Prisma.TenantWhereInput = {
+    ...(search ? { name: { contains: search, mode: "insensitive" as const } } : {}),
+    ...suspendedFilter(q.data.status),
+  };
   const [total, tenants] = await Promise.all([
     prisma.tenant.count({ where }),
     prisma.tenant.findMany({
@@ -139,9 +199,12 @@ platformAdminRouter.get("/users", asyncHandler(async (req, res) => {
   const q = listQuery.safeParse(req.query);
   if (!q.success) return res.status(400).json({ error: "invalid_request", details: q.error.issues });
   const { q: search, page, pageSize } = q.data;
-  const where: Prisma.UserWhereInput = search
-    ? { OR: [{ email: { contains: search, mode: "insensitive" } }, { displayName: { contains: search, mode: "insensitive" } }] }
-    : {};
+  const where: Prisma.UserWhereInput = {
+    ...(search
+      ? { OR: [{ email: { contains: search, mode: "insensitive" as const } }, { displayName: { contains: search, mode: "insensitive" as const } }] }
+      : {}),
+    ...suspendedFilter(q.data.status),
+  };
   const [total, users] = await Promise.all([
     prisma.user.count({ where }),
     prisma.user.findMany({
@@ -184,7 +247,11 @@ platformAdminRouter.get("/cameras", asyncHandler(async (req, res) => {
   const q = listQuery.safeParse(req.query);
   if (!q.success) return res.status(400).json({ error: "invalid_request", details: q.error.issues });
   const { q: search, page, pageSize } = q.data;
-  const where: Prisma.CameraWhereInput = search ? { name: { contains: search, mode: "insensitive" } } : {};
+  const where: Prisma.CameraWhereInput = {
+    ...(search ? { name: { contains: search, mode: "insensitive" as const } } : {}),
+    ...(q.data.type ? { connectorType: q.data.type } : {}),
+    ...(q.data.status === "all" ? {} : { tenant: suspendedFilter(q.data.status) }),
+  };
   const [total, cameras] = await Promise.all([
     prisma.camera.count({ where }),
     prisma.camera.findMany({

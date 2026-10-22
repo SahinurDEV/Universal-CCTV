@@ -97,6 +97,29 @@ describe("platform admin views", () => {
     expect((await admin.agent.get("/platform-admin/tenants").query({ pageSize: 1000 })).status).toBe(400);
     expect((await admin.agent.get("/platform-admin/tenants/not-a-uuid")).status).toBe(404);
   });
+
+  it("timeseries returns daily running totals and trends", async () => {
+    const r = await admin.agent.get("/platform-admin/timeseries").query({ days: 14 });
+    expect(r.status).toBe(200);
+    expect(r.body.points).toHaveLength(14);
+    const last = r.body.points[13];
+    expect(last.day).toBe(new Date().toISOString().slice(0, 10));
+    expect(last.cameras).toBe(await prisma.camera.count());
+    for (let i = 1; i < 14; i++) expect(r.body.points[i].cameras).toBeGreaterThanOrEqual(r.body.points[i - 1].cameras);
+    expect(r.body.trends).toHaveProperty("alerts");
+    expect((await admin.agent.get("/platform-admin/timeseries").query({ days: 365 })).status).toBe(400);
+    expect((await owner.agent.get("/platform-admin/timeseries")).status).toBe(403);
+  });
+
+  it("filters by status and camera type", async () => {
+    const act = await admin.agent.get("/platform-admin/tenants").query({ status: "active", q: "PA Customer" });
+    expect(act.body.tenants.every((t: { suspendedAt: string | null }) => t.suspendedAt === null)).toBe(true);
+    const sus = await admin.agent.get("/platform-admin/users").query({ status: "suspended" });
+    expect(sus.body.users.every((u: { suspendedAt: string | null }) => u.suspendedAt !== null)).toBe(true);
+    const cams = await admin.agent.get("/platform-admin/cameras").query({ type: "SIMULATED" });
+    expect(cams.body.cameras.every((c: { connectorType: string }) => c.connectorType === "SIMULATED")).toBe(true);
+    expect((await admin.agent.get("/platform-admin/cameras").query({ type: "BOGUS" })).status).toBe(400);
+  });
 });
 
 describe("suspension", () => {

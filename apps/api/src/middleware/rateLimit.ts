@@ -39,7 +39,7 @@ export const globalApiRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "too_many_requests" },
-  skip: (req) => req.path.includes("/live/hls/"),
+  skip: (req) => req.path.includes("/live/hls/") || /^\/public\/share\/v\/[^/]+\/hls\//.test(req.path),
 });
 
 /** Live HLS proxy: playlists + 1s segments for many tiles. */

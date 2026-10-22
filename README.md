@@ -40,6 +40,11 @@ docs/deployment.md for running this anywhere but here.
   tablet layouts. Backed by a new `POST /auth/mobile/login` bearer-token
   mode and `/push/fcm/*` endpoints. See docs/mobile-app.md.
 
+- **Share links**: time-limited public links to one camera's live view or a
+  recorded clip, with optional password, view limit and instant revocation.
+  HMAC-signed tokens (only a hash stored), strict scope, rate limits and audit
+  log; share action in the mobile app. See docs/share-links.md.
+
 - **People & vehicle detection**: when motion fires, a snapshot is taken and
   run through SSD MobileNet v1 (COCO, Apache-2.0) on CPU via
   onnxruntime-node; per-camera alert classes (person / vehicle / any);

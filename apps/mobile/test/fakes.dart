@@ -58,6 +58,13 @@ class FakeApi extends ApiClient {
   Future<String> startLive(String id) async => throw ApiException(503, 'live_unavailable', 'no stream in tests');
 
   @override
+  Future<String> createShareLink(String cameraId,
+      {required String kind, required int expiresInMinutes, DateTime? clipStart, DateTime? clipEnd, String? password, int? maxViews}) async {
+    calls.add('share:$kind:$expiresInMinutes:${password ?? ''}:${maxViews ?? ''}:${clipStart != null}');
+    return 'https://cctv.test/share/sl_test';
+  }
+
+  @override
   Future<MotionSettings> motionSettings(String id) async => motion;
 
   @override

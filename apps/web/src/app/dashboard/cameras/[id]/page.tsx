@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LivePlayer } from "@/components/LivePlayer";
 import { MotionPanel } from "@/components/MotionPanel";
+import { SharePanel } from "@/components/SharePanel";
 import { useSession } from "@/lib/useSession";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -315,6 +316,7 @@ export default function CameraDetailPage() {
       </section>
 
       <MotionPanel cameraId={camera.id} canEdit={canEditMotion} />
+      {canEditMotion && <SharePanel cameraId={camera.id} />}
 
       <section className="rounded-lg border border-slate-800 p-4">
         <h2 className="mb-3 text-sm font-medium text-slate-400">Capabilities</h2>

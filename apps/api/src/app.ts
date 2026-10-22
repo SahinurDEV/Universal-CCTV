@@ -22,6 +22,7 @@ import { cameraMotionRouter, motionEventsRouter } from "./routes/motion.js";
 import { invitesRouter, membersRouter } from "./routes/invites.js";
 import { pushRouter } from "./routes/push.js";
 import { retentionRouter } from "./routes/retention.js";
+import { cameraShareRouter, publicShareRouter, shareAdminRouter } from "./routes/share.js";
 import { originCheck } from "./middleware/origin-check.js";
 import { globalApiRateLimiter } from "./middleware/rateLimit.js";
 
@@ -61,6 +62,9 @@ export function createApp() {
   // Mounted before camerasRouter so the hot HLS path runs its own auth once
   // instead of camerasRouter's router-level auth plus its own.
   app.use("/cameras", liveRouter);
+  app.use("/public/share", publicShareRouter);
+  app.use("/cameras", cameraShareRouter);
+  app.use("/shares", shareAdminRouter);
   app.use("/cameras", cameraMotionRouter);
   app.use("/cameras", camerasRouter);
   app.use("/cameras", recordingRouter);

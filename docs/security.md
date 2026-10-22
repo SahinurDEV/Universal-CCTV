@@ -294,3 +294,12 @@ all other sessions.
   logged.
 - **Not done:** certificate pinning in the app; push payloads contain only
   ids and the alert text (no snapshot URL).
+
+## Share links (feature/share-links)
+
+Public share links are covered in docs/share-links.md: HMAC-signed tokens with
+only a SHA-256 stored, uniform 404 for every unusable link, atomic view
+counting, short-lived link-bound view tokens re-checked on every request,
+per-IP limits on opening (password guessing) and streaming, and audit entries
+for create/revoke/view/failed password. Residual risk: presigned clip segment
+URLs are valid on their own for `SIGNED_URL_TTL_SECONDS` once issued.

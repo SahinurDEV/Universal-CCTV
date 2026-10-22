@@ -18,7 +18,28 @@ docs/monitoring-and-alerts.md for alerting, docs/security.md and
 docs/failure-recovery.md for what those two review passes found, and
 docs/deployment.md for running this anywhere but here.
 
+## Documentation
+
+- 📘 **[User manual](docs/user-manual.md)** — sign up, add locations, connect
+  cameras (RTSP paths for Hikvision, Dahua, Reolink, Axis, Tapo, Uniview,
+  ONVIF), remote access, live view, recordings, alerts, settings.
+- 🧪 **[Local testing guide](docs/local-testing.md)** — exact commands to run
+  and test everything locally, with or without Docker, using a fake ffmpeg camera.
+- 🔒 [Security](docs/security.md) · [Testing](docs/testing.md) · [Deployment](docs/deployment.md)
+
 ## What's implemented so far
+
+- **Live View**: multi-camera grid (1 / 2×2 / 3×3 / 4×4, location filter,
+  paging) playing live HLS from MediaMTX through an authenticated API proxy —
+  every playlist/segment request re-checks the session and tenant, MediaMTX
+  itself is never exposed to browsers.
+- **Locations**: create/edit/delete sites (name, address, time zone) and
+  assign cameras; tenant-scoped with RBAC.
+- **Integrations**: signed outbound webhooks (HMAC-SHA256) for every new
+  alert, with per-event filtering, test delivery, secret rotation, and SSRF
+  protection on the target URL.
+- **Settings**: profile, password change (revokes other sessions), per-user
+  alert preferences, signed-in devices / sign out everywhere else.
 
 - Monorepo (pnpm workspaces): `apps/web` (Next.js dashboard), `apps/api`
   (Express API), `packages/shared` (camera connector/capability types shared
@@ -62,9 +83,8 @@ docs/deployment.md for running this anywhere but here.
 - **Dashboard**: login/register pages, auth-gated layout with the full nav
   (Overview, Cameras, Live View, Recordings, Storage, Locations, Alerts,
   Integrations, Subscription, Settings), a working Cameras list/add/detail
-  flow with discovery and connection-testing wired in against the real API,
-  and honestly-labeled "not implemented yet" pages for every section that
-  isn't built (no fake buttons).
+  flow with discovery and connection-testing wired in against the real API.
+  Every nav section is now implemented.
 - **Real cloud recording pipeline**: start/stop recording a camera (any
   connector type) — MediaMTX pulls the RTSP stream and writes fMP4 segments
   natively (true stream-copy, no transcoding), a background worker

@@ -13,3 +13,6 @@ minio-data/
 postgres-data/
 tmp/
 *.tsbuildinfo
+.local-run/
+auto.crt
+auto.key

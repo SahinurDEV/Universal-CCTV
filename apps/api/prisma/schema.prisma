@@ -35,7 +35,9 @@ model Tenant {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
+  displayName  String?  @map("display_name")
   passwordHash String   @map("password_hash")
+  passwordChangedAt DateTime? @map("password_changed_at")
   emailVerifiedAt DateTime? @map("email_verified_at")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -88,6 +90,10 @@ model Membership {
   tenantId  String   @map("tenant_id")
   userId    String   @map("user_id")
   role      Role
+  /// Per-user, per-workspace alert preferences: which notification types
+  /// this member wants to see (in-app list + unread badge). Null = all on.
+  /// Shape: { mutedTypes: NotificationType[] }
+  notificationPreferences Json? @map("notification_preferences")
   createdAt DateTime @default(now()) @map("created_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -445,15 +451,24 @@ model GatewayDevice {
   @@map("gateway_devices")
 }
 
-/// Config for future manufacturer-API connectors (section 6/7). No provider is
-/// implemented yet; this only reserves the data model.
+/// Outbound integrations. Implemented provider: "webhook" (signed JSON POST
+/// for every new alert). Manufacturer-cloud connectors are future work.
 model IntegrationConfig {
   id        String   @id @default(uuid())
   tenantId  String   @map("tenant_id")
   provider  String
+  name      String   @default("")
+  /// Non-secret settings only (e.g. webhook URL, subscribed event types).
   config    Json
+  /// AES-256-GCM encrypted secret (e.g. webhook signing secret), same scheme
+  /// as CameraCredential. Never returned by the API after creation.
+  encryptedSecret String? @map("encrypted_secret")
+  secretIv        String? @map("secret_iv")
   isEnabled Boolean  @default(false) @map("is_enabled")
+  lastDeliveryAt     DateTime? @map("last_delivery_at")
+  lastDeliveryStatus String?   @map("last_delivery_status")
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

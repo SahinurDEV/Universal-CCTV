@@ -14,18 +14,35 @@ import { retentionPoliciesRouter } from "./routes/retention-policies.js";
 import { storageRouter } from "./routes/storage.js";
 import { subscriptionRouter } from "./routes/subscription.js";
 import { notificationsRouter } from "./routes/notifications.js";
+import { liveRouter } from "./routes/live.js";
+import { locationsRouter } from "./routes/locations.js";
+import { integrationsRouter } from "./routes/integrations.js";
+import { accountRouter } from "./routes/account.js";
+import { originCheck } from "./middleware/origin-check.js";
+import { globalApiRateLimiter } from "./middleware/rateLimit.js";
 
 export function createApp() {
   const env = loadEnv();
   const app = express();
+  const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean);
+
+  app.disable("x-powered-by");
+  // Behind a reverse proxy / load balancer, set TRUST_PROXY (e.g. "1") so
+  // rate limits key on the real client IP instead of the proxy's.
+  if (process.env.TRUST_PROXY) {
+    const v = process.env.TRUST_PROXY;
+    app.set("trust proxy", /^\d+$/.test(v) ? Number(v) : v);
+  }
 
   app.use(helmet());
   app.use(
     cors({
-      origin: env.CORS_ORIGIN,
+      origin: allowedOrigins,
       credentials: true,
     }),
   );
+  app.use(originCheck(allowedOrigins));
+  app.use(globalApiRateLimiter);
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
   app.use(
@@ -37,9 +54,15 @@ export function createApp() {
 
   app.use(healthRouter);
   app.use(authRouter);
+  // Mounted before camerasRouter so the hot HLS path runs its own auth once
+  // instead of camerasRouter's router-level auth plus its own.
+  app.use("/cameras", liveRouter);
   app.use("/cameras", camerasRouter);
   app.use("/cameras", recordingRouter);
   app.use("/cameras", playbackRouter);
+  app.use("/locations", locationsRouter);
+  app.use("/integrations", integrationsRouter);
+  app.use("/account", accountRouter);
   app.use("/retention-policies", retentionPoliciesRouter);
   app.use("/storage", storageRouter);
   app.use("/subscription", subscriptionRouter);
@@ -58,7 +81,7 @@ export function createApp() {
   // route handlers don't need their own catch-and-log boilerplate for
   // genuinely unexpected failures (DB/Redis blips, etc.) — only for cases
   // they want to turn into a specific 4xx.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
     logger.error({ err, method: req.method, path: req.path }, "unhandled error in request handler");
     if (res.headersSent) {

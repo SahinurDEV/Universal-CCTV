@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { createApp } from "../app.js";

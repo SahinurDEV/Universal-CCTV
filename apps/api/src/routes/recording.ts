@@ -2,10 +2,9 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { requireAuth, requireTenant, requireRole } from "../middleware/auth.js";
-import { decryptSecret } from "../lib/crypto.js";
+import { resolveCameraRtspUrl } from "../lib/camera-source.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { logger } from "../lib/logger.js";
-import { buildRtspUrl } from "../connectors/rtsp-url.js";
 import { addRecordingPath, stopRecordingPath, removeRecordingPath } from "../connectors/mediamtx-client.js";
 import { drainPendingSegments } from "../recording/ingest.js";
 import { getActiveSubscription, getStorageBytesUsed } from "../lib/quota.js";
@@ -83,17 +82,11 @@ recordingRouter.post("/:id/recording/start", requireRole("OWNER", "ADMIN", "OPER
     }
   }
 
-  let credentialParts: { username?: string; password?: string; path?: string } | undefined;
-  if (camera.credential) {
-    try {
-      credentialParts = JSON.parse(
-        decryptSecret({ ciphertext: camera.credential.encryptedValue, iv: camera.credential.encryptionIv }),
-      );
-    } catch {
-      return res.status(500).json({ error: "credential_decrypt_failed" });
-    }
+  const source = await resolveCameraRtspUrl(camera);
+  if (!source.ok) {
+    return res.status(source.status).json({ error: source.error, message: source.message });
   }
-  const rtspUrl = buildRtspUrl(camera.host, camera.port, credentialParts);
+  const rtspUrl = source.rtspUrl;
 
   try {
     await addRecordingPath(camera.id, rtspUrl, { segmentDurationSeconds: parsed.data.segmentSeconds });

@@ -147,3 +147,63 @@ for both (`cameras.integration.test.ts`).
   per-account lockout does not).
 - Signed URL generation for recording playback — no recordings exist yet to
   sign URLs for.
+
+## Security pass — October 2026 (feature/complete-platform)
+
+Real problems found and fixed in this pass (each has a test unless noted):
+
+1. **SSRF: connect-time re-validation was documented but never implemented.**
+   `network-guard.ts` said the connector layer would re-check the *resolved*
+   address before dialing; nothing did. A DNS name resolving to 127.0.0.1 /
+   169.254.169.254, alternative IP spellings (`2130706433`, `0x7f000001`,
+   `0177.0.0.1`), or IPv4-mapped IPv6 (`::ffff:127.0.0.1`) passed the guard
+   and were dialed by ffprobe/MediaMTX. Fixed: strict hostname syntax check,
+   numeric-hostname rejection, IPv4-mapped handling, multicast/reserved
+   blocks, optional RFC1918 block (`BLOCK_PRIVATE_CAMERA_HOSTS`), a
+   `CAMERA_HOST_DENYLIST`, and `assertSafeResolvedCameraHost` (DNS lookup,
+   every address checked) called right before test-connection,
+   recording start and live start (`lib/camera-source.ts`).
+   Tests: `network-guard.test.ts`, cameras integration test.
+   *Residual:* a DNS-rebinding window between our lookup and the dialer's own
+   lookup remains; fully closing it needs dialing by pinned IP.
+2. **Deleted cameras kept streaming/recording on MediaMTX forever** (path
+   never removed). Fixed in `DELETE /cameras/:id`.
+3. **`STORAGE_FORCE_PATH_STYLE=false` was ignored** (`z.coerce.boolean()`
+   turns `"false"` into `true`). Fixed with an explicit enum parser.
+4. **Login timing leaked which emails exist** (bcrypt only ran when the user
+   existed). Now a dummy hash is always compared.
+5. **Emails were case-sensitive** (`A@x.com` and `a@x.com` = two accounts).
+   Now trimmed + lower-cased on register and login.
+6. **No password length cap** — bcrypt silently ignores bytes after 72 and
+   huge inputs are a cheap CPU DoS. Now 8–128 chars and ≤72 bytes.
+7. **CSRF defense-in-depth:** SameSite=lax does not protect against other
+   origins on the same *site* (other localhost ports, sibling subdomains),
+   and several POSTs have no body. Added an Origin allow-list check for all
+   state-changing requests (`middleware/origin-check.ts`).
+8. **No rate limit on server-side dial-outs** (`/cameras/discover`,
+   `test-connection`) and `/cameras/discover` was open to VIEWERs. Added
+   `probeRateLimiter`, role restriction, a global API limiter, and a
+   separate generous limiter for live HLS. `TRUST_PROXY` env supported so
+   limits key on the real client IP behind a proxy.
+9. **Production could boot with the published default `APP_SECRET`** or
+   `CORS_ORIGIN=*`. Now refused at startup.
+10. **MediaMTX anonymous access from any IP** (`ips: []`). Now limited to
+    loopback + Docker bridge range; RTMP/SRT/WebRTC/MoQ disabled; image
+    pinned to 1.21.2. Browsers only reach video through the authenticated
+    API proxy (`routes/live.ts`) which validates file names (no traversal)
+    and forwards only HLS's own query params.
+11. **Web security headers** were absent: added CSP, `X-Frame-Options: DENY`,
+    `nosniff`, Referrer-Policy, Permissions-Policy (`apps/web/next.config.mjs`).
+12. **Input validation:** camera credential fields reject control characters
+    (CR/LF/NUL) and have length caps; host ≤253 chars.
+13. **Dependency audit:** 44 advisories (5 critical, 13 high) → 2 remaining.
+    Upgraded Next.js 14 → 15.5 (React 19), vitest 2 → 4, vite → 7, esbuild,
+    postcss (pnpm overrides). Remaining: `braces` via eslint-config-next
+    (dev-only, no patched version published) and `postcss-selector-parser`
+    via Tailwind 3 (dev/build-only, moderate).
+
+New features were built with the same rules: tenant-scoped queries returning
+404 for other tenants' ids, server-side RBAC, audit log entries, encrypted
+webhook secrets (shown once), webhook SSRF guard (no redirects, https-only in
+production, private ranges blocked in production), password change revoking
+all other sessions.

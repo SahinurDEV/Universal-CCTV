@@ -2,7 +2,9 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { requireAuth, requireTenant, requireRole } from "../middleware/auth.js";
-import { assertSafeCameraHost, UnsafeCameraHostError } from "../lib/network-guard.js";
+import { assertCameraTargetAllowed, UnsafeCameraHostError } from "../lib/network-guard.js";
+import { probeRateLimiter } from "../middleware/rateLimit.js";
+import { hasControlChars } from "../lib/validation.js";
 import { encryptSecret, decryptSecret } from "../lib/crypto.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { logger } from "../lib/logger.js";
@@ -11,6 +13,7 @@ import { buildRtspUrl } from "../connectors/rtsp-url.js";
 import { probeRtspStream, capabilitiesFromRtspProbe } from "../connectors/rtsp-probe.js";
 import { probeOnvifCapabilities } from "../connectors/onvif-capabilities.js";
 import { discoverOnvifDevices } from "../connectors/onvif-discovery.js";
+import { removePathIfExists } from "../connectors/mediamtx-client.js";
 import { getActiveSubscription, getCameraCount } from "../lib/quota.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 
@@ -18,17 +21,22 @@ export const camerasRouter = Router();
 
 camerasRouter.use(requireAuth, requireTenant);
 
+// No control characters anywhere: these values end up inside an RTSP URL and
+// an ffprobe argument, so CR/LF/NUL must never get through.
+const noControlChars = (max: number) =>
+  z.string().max(max).refine((v) => !hasControlChars(v), "must not contain control characters");
+
 const credentialSchema = z.object({
-  username: z.string().optional(),
-  password: z.string().optional(),
-  path: z.string().optional(),
+  username: noControlChars(256).optional(),
+  password: noControlChars(256).optional(),
+  path: noControlChars(1024).optional(),
 });
 
 const createCameraSchema = z.object({
   name: z.string().min(1).max(200),
   locationId: z.string().uuid().optional(),
   connectorType: z.enum(["RTSP", "ONVIF", "SIMULATED"]),
-  host: z.string().min(1),
+  host: z.string().trim().min(1).max(253),
   port: z.coerce.number().int().min(1).max(65535),
   onvifPort: z.coerce.number().int().min(1).max(65535).optional(),
   credential: credentialSchema.optional(),
@@ -113,31 +121,17 @@ camerasRouter.post("/", requireRole("OWNER", "ADMIN", "OPERATOR"), asyncHandler(
     }
   }
 
-  // SIMULATED cameras point at our own dev-only media server fixture,
-  // which is reachable at exactly "localhost" — the one host the SSRF guard
-  // otherwise always blocks. This is NOT a blanket exemption for the
-  // connector type: `host` is an ordinary user-supplied field independent
-  // of `connectorType`, so a bypass here previously let anyone declare
-  // `connectorType: "SIMULATED"` with an arbitrary internal host (e.g. the
-  // cloud metadata address) and have the server actually dial it via
-  // test-connection/recording-start. Pinning to the literal fixture address
-  // closes that while still allowing the real simulated camera to work.
-  if (connectorType === "SIMULATED") {
-    if (host !== "localhost") {
-      return res.status(400).json({
-        error: "unsafe_host",
-        message: 'Simulated cameras must use host "localhost" (the dev fixture address).',
-      });
+  // SIMULATED cameras are pinned to the dev fixture host ("localhost") and
+  // can be disabled entirely; every other connector type goes through the
+  // SSRF guard. See lib/network-guard.ts. (A prior bug let any host be
+  // declared SIMULATED and bypass the guard — still covered by tests.)
+  try {
+    await assertCameraTargetAllowed(connectorType, host, { resolve: false });
+  } catch (err) {
+    if (err instanceof UnsafeCameraHostError) {
+      return res.status(400).json({ error: "unsafe_host", message: err.message });
     }
-  } else {
-    try {
-      assertSafeCameraHost(host);
-    } catch (err) {
-      if (err instanceof UnsafeCameraHostError) {
-        return res.status(400).json({ error: "unsafe_host", message: err.message });
-      }
-      throw err;
-    }
+    throw err;
   }
 
   if (locationId) {
@@ -210,7 +204,7 @@ camerasRouter.post("/", requireRole("OWNER", "ADMIN", "OPERATOR"), asyncHandler(
  * API runs on the camera's network; see connectors/onvif-discovery.ts for
  * the cloud-deployment limitation.
  */
-camerasRouter.post("/discover", asyncHandler(async (req, res) => {
+camerasRouter.post("/discover", requireRole("OWNER", "ADMIN", "OPERATOR"), probeRateLimiter, asyncHandler(async (req, res) => {
   const timeoutMs = Math.min(Math.max(Number(req.body?.timeoutMs) || 5000, 1000), 15000);
   const devices = await discoverOnvifDevices(timeoutMs);
   res.json({
@@ -245,7 +239,7 @@ const updateCameraSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   locationId: z.string().uuid().nullable().optional(),
   retentionPolicyId: z.string().uuid().nullable().optional(),
-  host: z.string().min(1).optional(),
+  host: z.string().trim().min(1).max(253).optional(),
   port: z.coerce.number().int().min(1).max(65535).optional(),
   onvifPort: z.coerce.number().int().min(1).max(65535).nullable().optional(),
   credential: credentialSchema.optional(),
@@ -266,22 +260,13 @@ camerasRouter.patch("/:id", requireRole("OWNER", "ADMIN", "OPERATOR"), asyncHand
   const { credential, ...fields } = parsed.data;
 
   if (fields.host) {
-    if (existing.connectorType === "SIMULATED") {
-      if (fields.host !== "localhost") {
-        return res.status(400).json({
-          error: "unsafe_host",
-          message: 'Simulated cameras must use host "localhost" (the dev fixture address).',
-        });
+    try {
+      await assertCameraTargetAllowed(existing.connectorType, fields.host, { resolve: false });
+    } catch (err) {
+      if (err instanceof UnsafeCameraHostError) {
+        return res.status(400).json({ error: "unsafe_host", message: err.message });
       }
-    } else {
-      try {
-        assertSafeCameraHost(fields.host);
-      } catch (err) {
-        if (err instanceof UnsafeCameraHostError) {
-          return res.status(400).json({ error: "unsafe_host", message: err.message });
-        }
-        throw err;
-      }
+      throw err;
     }
   }
 
@@ -352,6 +337,13 @@ camerasRouter.delete("/:id", requireRole("OWNER", "ADMIN"), asyncHandler(async (
 
   await prisma.camera.delete({ where: { id: existing.id } });
 
+  // Stop MediaMTX from pulling (and possibly recording) a camera that no
+  // longer exists — previously a deleted camera kept streaming/recording
+  // on the media server indefinitely. Best-effort: the DB delete stands.
+  await removePathIfExists(existing.id).catch((err) =>
+    logger.warn({ err, cameraId: existing.id }, "failed to remove media server path for deleted camera"),
+  );
+
   await writeAuditLog({
     tenantId: req.authTenant!.id,
     actorUserId: req.authUser!.id,
@@ -375,7 +367,7 @@ camerasRouter.delete("/:id", requireRole("OWNER", "ADMIN"), asyncHandler(async (
  * was there before, since stale "it worked last time" data is worse than no
  * data.
  */
-camerasRouter.post("/:id/test-connection", requireRole("OWNER", "ADMIN", "OPERATOR"), asyncHandler(async (req, res) => {
+camerasRouter.post("/:id/test-connection", requireRole("OWNER", "ADMIN", "OPERATOR"), probeRateLimiter, asyncHandler(async (req, res) => {
   const camera = await prisma.camera.findFirst({
     where: { id: req.params.id, tenantId: req.authTenant!.id },
     include: { credential: true },
@@ -393,6 +385,17 @@ camerasRouter.post("/:id/test-connection", requireRole("OWNER", "ADMIN", "OPERAT
     } catch {
       return res.status(500).json({ error: "credential_decrypt_failed" });
     }
+  }
+
+  // Connect-time SSRF check: resolve the host and re-validate every address
+  // right before ffprobe dials it (closes the DNS-name -> 127.0.0.1 bypass).
+  try {
+    await assertCameraTargetAllowed(camera.connectorType, camera.host, { resolve: true });
+  } catch (err) {
+    if (err instanceof UnsafeCameraHostError) {
+      return res.status(400).json({ error: "unsafe_host", message: err.message });
+    }
+    throw err;
   }
 
   const rtspUrl = buildRtspUrl(camera.host, camera.port, credentialParts);

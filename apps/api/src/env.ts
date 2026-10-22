@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const DEV_APP_SECRET = "dev-only-insecure-secret-change-me-please-32chars";
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   // Default is 4100, not the more common 4000: this dev machine already has
@@ -18,7 +20,7 @@ const envSchema = z.object({
     .string()
     .min(32, "APP_SECRET must be at least 32 characters")
     .optional()
-    .default("dev-only-insecure-secret-change-me-please-32chars"),
+    .default(DEV_APP_SECRET),
 
   // AES-256-GCM key for encrypting camera credentials (RTSP username/password)
   // at rest. 32 raw bytes, hex-encoded (64 hex characters). No default — a
@@ -35,7 +37,13 @@ const envSchema = z.object({
   STORAGE_BUCKET: z.string().min(1, "STORAGE_BUCKET is required"),
   STORAGE_ACCESS_KEY_ID: z.string().min(1, "STORAGE_ACCESS_KEY_ID is required"),
   STORAGE_SECRET_ACCESS_KEY: z.string().min(1, "STORAGE_SECRET_ACCESS_KEY is required"),
-  STORAGE_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
+  // NOTE: not z.coerce.boolean() — that turns the string "false" into true
+  // (any non-empty string is truthy), so STORAGE_FORCE_PATH_STYLE=false for
+  // real AWS S3 was silently ignored.
+  STORAGE_FORCE_PATH_STYLE: z
+    .enum(["true", "false", "1", "0"])
+    .default("true")
+    .transform((v) => v === "true" || v === "1"),
 
   SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(300),
 
@@ -47,6 +55,30 @@ const envSchema = z.object({
   // the warning in infra/mediamtx/mediamtx.yml and docs/security.md.
   MEDIAMTX_API_URL: z.string().default("http://localhost:9997"),
   MEDIAMTX_PLAYBACK_URL: z.string().default("http://localhost:9996"),
+  // MediaMTX HLS server. Browsers never reach it directly — apps/api proxies
+  // live-view requests to it after checking the session + tenant.
+  MEDIAMTX_HLS_URL: z.string().default("http://localhost:8888"),
+  // Directory (as seen by the MediaMTX process) where recordings are written.
+  // "/recordings" matches the Docker volume; a native MediaMTX install
+  // usually points this at a writable local folder instead.
+  MEDIAMTX_RECORD_DIR: z.string().default("/recordings"),
+  // Host that SIMULATED (fake test) cameras must use. Simulated cameras are a
+  // dev/test fixture; set ALLOW_SIMULATED_CAMERAS=false in production.
+  ALLOW_SIMULATED_CAMERAS: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true" || v === "1")),
+  // Comma-separated hostnames/IPs the server must never dial for camera
+  // probes, in addition to the built-in loopback/link-local/metadata list.
+  CAMERA_HOST_DENYLIST: z.string().default(""),
+  // Set "true" to also block RFC1918 private ranges (10/8, 172.16/12,
+  // 192.168/16) for camera hosts. Recommended for multi-tenant cloud
+  // deployments where cameras are reached over the internet; leave off
+  // for self-hosted installs where cameras sit on the same LAN.
+  BLOCK_PRIVATE_CAMERA_HOSTS: z
+    .enum(["true", "false", "1", "0"])
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -65,6 +97,20 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
 
-  cachedEnv = parsed.data;
+  const env = parsed.data;
+  if (env.NODE_ENV === "production") {
+    // Refuse to boot production with the published dev default secret.
+    if (env.APP_SECRET === DEV_APP_SECRET) {
+      throw new Error("Invalid environment configuration:\n  - APP_SECRET: must be set to a unique value in production");
+    }
+    if (env.CORS_ORIGIN === "*") {
+      throw new Error("Invalid environment configuration:\n  - CORS_ORIGIN: must not be '*' (credentials are sent cross-origin)");
+    }
+  }
+  if (env.ALLOW_SIMULATED_CAMERAS === undefined) {
+    env.ALLOW_SIMULATED_CAMERAS = env.NODE_ENV !== "production";
+  }
+
+  cachedEnv = env;
   return cachedEnv;
 }

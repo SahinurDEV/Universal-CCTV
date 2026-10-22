@@ -217,3 +217,20 @@ messages for exact commands):
   them, not just against mocks.
 - `prisma migrate dev` applied cleanly against the real Postgres container
   twice (initial schema, then the `Session` table addition).
+
+## Added in feature/complete-platform
+
+- `src/lib/network-guard.test.ts` (unit): SSRF guard — loopback/metadata/
+  link-local, numeric IP spellings, IPv4-mapped IPv6, URL-injection hosts,
+  DNS-resolved checks, SIMULATED pinning.
+- `src/routes/platform.integration.test.ts`: Locations CRUD + camera
+  assignment + tenant isolation + RBAC; account settings (profile, password
+  change revoking other sessions, case-insensitive login, sessions, alert
+  preferences); webhooks (SSRF rejection, secret shown once, real signed
+  delivery to a LAN receiver, event filtering, tenant isolation); **live
+  view against the real MediaMTX HLS output** (auth, tenant isolation, path
+  traversal, real playlist + video segment for a VIEWER); CSRF Origin check.
+- `cameras.integration.test.ts`: connect-time SSRF check blocks a stored
+  loopback host for test-connection, recording start and live start.
+
+Running without Docker: see docs/local-testing.md (§2B, `scripts/local-services.sh`).

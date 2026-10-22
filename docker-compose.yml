@@ -77,7 +77,7 @@ services:
   # work and, later, the recording pipeline. It does not simulate a camera by
   # itself — `simulated-camera` below publishes a synthetic stream into it.
   mediamtx:
-    image: bluenviron/mediamtx:latest
+    image: bluenviron/mediamtx:1.21.2 # pinned: infra/mediamtx/mediamtx.yml uses keys (e.g. moq) that older versions reject
     restart: unless-stopped
     volumes:
       - ./infra/mediamtx/mediamtx.yml:/mediamtx.yml:ro
@@ -91,7 +91,7 @@ services:
       # Every current consumer (apps/api, the worker, manual testing) runs
       # on this host, so loopback-only doesn't break anything.
       - "127.0.0.1:8554:8554" # RTSP
-      - "127.0.0.1:8889:8889" # WebRTC (unused yet, reserved for live view)
+      - "127.0.0.1:8888:8888" # HLS — live view, proxied through apps/api (auth-checked)
       - "127.0.0.1:9997:9997" # config API — apps/api uses this to add/remove per-camera recording paths
       - "127.0.0.1:9996:9996" # playback API — apps/api fetches completed segments over HTTP from here
 

@@ -295,6 +295,37 @@ all other sessions.
 - **Not done:** certificate pinning in the app; push payloads contain only
   ids and the alert text (no snapshot URL).
 
+## PTZ and two-way audio (feature/ptz-audio)
+
+- Camera control (PTZ move/stop/presets, talk) requires Operator, Admin or
+  Owner in the active workspace; Viewers get 403. Other workspaces' cameras
+  404.
+- Per-user rate limits: 240 PTZ requests/min, 20 talk clips/min; one talk
+  clip at a time per camera.
+- Every control action is written to the workspace audit log with the actor.
+  Audio content is never stored or logged.
+- ONVIF and RTSP backchannel connections go through the same DNS-resolving
+  SSRF guard as Test connection, immediately before dialing.
+- Talk uploads are capped at 2 MB / 30 s and decoded by ffmpeg reading only
+  from stdin (no URLs, no files), output forced to raw G.711.
+- Inputs are strict zod schemas; preset names/tokens are allow-listed before
+  they are placed into SOAP XML.
+
+## Platform admin (feature/platform-admin)
+
+- The role lives in `users.is_platform_admin` (written only by the
+  `admin:grant` CLI) or `PLATFORM_ADMIN_EMAILS`. No route accepts it as
+  input; a test confirms that profile updates ignore it.
+- `requirePlatformAdmin` re-reads the user on every request, so revoking the
+  role takes effect immediately. It refuses suspended users and mobile bearer
+  sessions, and never consults workspace roles.
+- Admin list endpoints never return password hashes, camera hosts, RTSP
+  paths, credentials or tokens.
+- Suspend and unsuspend write the change and a `platform_audit_logs` row
+  (actor, target, reason, IP) in one transaction. They are rate-limited, and
+  admins can't suspend themselves or other admins.
+- User suspension revokes all sessions and FCM tokens. `requireAuth` also
+  rejects any session whose user is suspended, as a second check.
 ## Share links (feature/share-links)
 
 Public share links are covered in docs/share-links.md: HMAC-signed tokens with

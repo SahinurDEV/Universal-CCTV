@@ -17,6 +17,11 @@ model Tenant {
   /// Workspace-wide recording retention in days. Null = fall back to the
   /// retention policy captured on each segment at ingest time.
   retentionDays Int? @map("retention_days")
+  /// IANA timezone used for alert schedules (e.g. "Asia/Dhaka").
+  timezone  String   @default("UTC")
+  /// Set by a platform admin. Members lose access; motion alerts pause.
+  suspendedAt     DateTime? @map("suspended_at")
+  suspendedReason String?   @map("suspended_reason")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -45,6 +50,13 @@ model User {
   passwordHash String   @map("password_hash")
   passwordChangedAt DateTime? @map("password_changed_at")
   emailVerifiedAt DateTime? @map("email_verified_at")
+  /// Platform super-admin (operator of the whole service), completely
+  /// separate from workspace roles. Only set by the CLI
+  /// (`pnpm --filter @cctv/api admin:grant`) or PLATFORM_ADMIN_EMAILS —
+  /// there is no API that writes it.
+  isPlatformAdmin Boolean  @default(false) @map("is_platform_admin")
+  suspendedAt     DateTime? @map("suspended_at")
+  suspendedReason String?   @map("suspended_reason")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -54,6 +66,7 @@ model User {
   invitesSent  Invite[]
   pushSubscriptions PushSubscription[]
   fcmTokens    FcmToken[]
+  platformAuditLogs PlatformAuditLog[]
 
   @@map("users")
 }
@@ -174,6 +187,14 @@ model Camera {
   motionEvents      MotionEvent[]
   /// Which detections raise an alert: "any" (all motion), "person", "vehicle".
   motionAlertClasses String[] @default(["any"]) @map("motion_alert_classes")
+  /// Polygons (normalised 0..1 points) — only motion/objects inside count.
+  /// Null/empty = whole frame. See lib/zones.ts.
+  detectionZones     Json?    @map("detection_zones")
+  /// Weekly windows when alerts are active, in the workspace timezone.
+  /// Null = always active. See lib/schedule.ts.
+  alertSchedule      Json?    @map("alert_schedule")
+  /// Per-class minimum confidence, e.g. {"person":0.6,"vehicle":0.5}.
+  detectionThresholds Json?   @map("detection_thresholds")
   /// Per-camera retention override in days (null = workspace setting).
   retentionDaysOverride Int? @map("retention_days_override")
   shareLinks        ShareLink[]
@@ -589,6 +610,23 @@ model FcmToken {
 
   @@index([userId])
   @@map("fcm_tokens")
+}
+
+/// Audit trail for platform-admin actions (not tied to one workspace).
+model PlatformAuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String   @map("target_id")
+  metadata    Json?
+  ip          String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@map("platform_audit_logs")
 }
 
 enum ShareKind {

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LivePlayer } from "@/components/LivePlayer";
 import { MotionPanel } from "@/components/MotionPanel";
+import { PtzPanel } from "@/components/PtzPanel";
+import { DetectionPanel } from "@/components/DetectionPanel";
 import { SharePanel } from "@/components/SharePanel";
 import { useSession } from "@/lib/useSession";
 import { useParams, useRouter } from "next/navigation";
@@ -194,6 +196,7 @@ export default function CameraDetailPage() {
       </div>
 
       <LivePlayer cameraId={camera.id} name={`${camera.name} — live`} />
+      <PtzPanel cameraId={camera.id} />
 
       {testError && <p className="text-sm text-red-400">{testError}</p>}
 
@@ -317,6 +320,8 @@ export default function CameraDetailPage() {
 
       <MotionPanel cameraId={camera.id} canEdit={canEditMotion} />
       {canEditMotion && <SharePanel cameraId={camera.id} />}
+
+      <DetectionPanel cameraId={camera.id} canEdit={canEditMotion} />
 
       <section className="rounded-lg border border-slate-800 p-4">
         <h2 className="mb-3 text-sm font-medium text-slate-400">Capabilities</h2>

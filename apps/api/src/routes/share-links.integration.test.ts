@@ -165,6 +165,19 @@ describe("share links", () => {
     expect(b.body).toEqual(a.body);
   });
 
+  it("blocks links of a suspended workspace, including already-open viewers", async () => {
+    const r = await owner.post(`/cameras/${cameraId}/shares`).send({ kind: "CLIP", expiresInMinutes: 60, clipStart: new Date(Date.now() - 3600e3), clipEnd: new Date(Date.now() - 3000e3) });
+    const opened = await anon().post(`/public/share/${r.body.token}/open`).send({});
+    expect(opened.status).toBe(200);
+    await prisma.tenant.update({ where: { id: tenantId }, data: { suspendedAt: new Date(), suspendedReason: "test" } });
+    try {
+      expect((await anon().get(opened.body.clipUrl)).status).toBe(404);
+      expect((await anon().post(`/public/share/${r.body.token}/open`).send({})).status).toBe(404);
+    } finally {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { suspendedAt: null, suspendedReason: null } });
+    }
+  });
+
   it("forbids viewers from creating or listing links", async () => {
     await prisma.membership.update({ where: { tenantId_userId: { tenantId, userId } }, data: { role: "VIEWER" } });
     try {

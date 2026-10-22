@@ -69,3 +69,12 @@ export const inviteTokenRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "too_many_requests" },
 });
+
+/** Platform-admin mutations (suspend/unsuspend) — per IP. */
+export const adminActionRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests" },
+});

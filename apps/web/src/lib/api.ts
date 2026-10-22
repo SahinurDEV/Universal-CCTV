@@ -35,10 +35,11 @@ export interface TenantMembership {
   id: string;
   name: string;
   role: "OWNER" | "ADMIN" | "OPERATOR" | "VIEWER";
+  suspended?: boolean;
 }
 
 export interface SessionInfo {
-  user: { id: string; email: string };
+  user: { id: string; email: string; isPlatformAdmin?: boolean };
   tenants: TenantMembership[];
   activeTenantId: string | null;
 }
@@ -636,6 +637,135 @@ export function setCameraRetention(cameraId: string, retentionDays: number | nul
   return apiFetch<{ cameraId: string; overrideDays: number | null }>(`/retention/cameras/${cameraId}`, {
     method: "PUT",
     body: JSON.stringify({ retentionDays }),
+  });
+}
+
+// --- PTZ + two-way audio ---------------------------------------------------
+export interface PtzPreset { token: string; name: string }
+export interface PtzInfo {
+  supported: boolean;
+  zoom: boolean;
+  canControl: boolean;
+  presets: PtzPreset[];
+  status: { position: { x: number; y: number; zoom: number } | null; moving: boolean } | null;
+}
+export interface AudioInfo { listen: boolean; talk: boolean; codec?: string | null; canTalk: boolean; reason?: string | null }
+
+export const getPtz = (cameraId: string) => apiFetch<PtzInfo>(`/cameras/${cameraId}/ptz`);
+export const ptzMove = (cameraId: string, v: { x?: number; y?: number; zoom?: number; timeoutMs?: number }) =>
+  apiFetch<{ ok: true }>(`/cameras/${cameraId}/ptz/move`, { method: "POST", body: JSON.stringify(v) });
+export const ptzStop = (cameraId: string) => apiFetch<{ ok: true }>(`/cameras/${cameraId}/ptz/stop`, { method: "POST", body: "{}" });
+export const ptzSetPreset = (cameraId: string, name: string) =>
+  apiFetch<PtzPreset>(`/cameras/${cameraId}/ptz/presets`, { method: "POST", body: JSON.stringify({ name }) });
+export const ptzGotoPreset = (cameraId: string, token: string) =>
+  apiFetch<{ ok: true }>(`/cameras/${cameraId}/ptz/presets/${encodeURIComponent(token)}/goto`, { method: "POST", body: "{}" });
+export const ptzRemovePreset = (cameraId: string, token: string) =>
+  apiFetch<void>(`/cameras/${cameraId}/ptz/presets/${encodeURIComponent(token)}`, { method: "DELETE" });
+export const getAudioInfo = (cameraId: string) => apiFetch<AudioInfo>(`/cameras/${cameraId}/audio`);
+export async function sendTalkClip(cameraId: string, clip: Blob): Promise<{ ok: true; seconds: number }> {
+  const res = await fetch(`${API_BASE_URL}/cameras/${cameraId}/audio/talk`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": clip.type || "audio/webm" },
+    body: clip,
+  });
+  const body = await res.json().catch(() => undefined);
+  if (!res.ok) throw new ApiError(res.status, body);
+  return body;
+}
+
+// --- Detection zones / schedules / thresholds ---------------------------------
+
+export interface DetectionZone { id: string; name: string; points: [number, number][] }
+export interface ScheduleWindow { days: number[]; start: string; end: string }
+export interface AlertSchedule { enabled: boolean; windows: ScheduleWindow[] }
+export interface DetectionConfig {
+  cameraId: string;
+  zones: DetectionZone[];
+  schedule: AlertSchedule | null;
+  thresholds: { person?: number; vehicle?: number };
+  defaultThreshold: number;
+  timezone: string;
+  alertsActiveNow: boolean;
+  model: { id: string; name: string; license: string; enabled: boolean };
+}
+export function getDetectionConfig(cameraId: string) {
+  return apiFetch<DetectionConfig>(`/cameras/${cameraId}/detection`);
+}
+export function setDetectionConfig(
+  cameraId: string,
+  input: { zones?: DetectionZone[]; schedule?: AlertSchedule | null; thresholds?: { person?: number; vehicle?: number } | null },
+) {
+  return apiFetch<DetectionConfig>(`/cameras/${cameraId}/detection`, { method: "PUT", body: JSON.stringify(input) });
+}
+/** Fresh JPEG from the camera as an object URL (caller revokes it). */
+export async function fetchCameraSnapshot(cameraId: string): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/cameras/${cameraId}/snapshot.jpg`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => undefined));
+  return URL.createObjectURL(await res.blob());
+}
+export function getWorkspace() {
+  return apiFetch<{ id: string; name: string; timezone: string; role: string }>("/workspace");
+}
+export function setWorkspaceTimezone(timezone: string) {
+  return apiFetch<{ timezone: string }>("/workspace/timezone", { method: "PUT", body: JSON.stringify({ timezone }) });
+}
+
+// --- Platform admin ----------------------------------------------------------
+
+export interface AdminStats {
+  tenants: { total: number; suspended: number };
+  users: { total: number; suspended: number };
+  cameras: { total: number; recording: number };
+  storage: { bytes: number };
+  recordings: { segments: number };
+  alerts: { total: number; last24h: number };
+  sessions: { active: number; mobile: number };
+}
+export interface AdminTenant {
+  id: string; name: string; createdAt: string; suspendedAt: string | null; suspendedReason: string | null;
+  members: number; cameras: number; alerts: number; storageBytes: number; segments: number;
+}
+export interface AdminUser {
+  id: string; email: string; displayName: string | null; createdAt: string; suspendedAt: string | null;
+  suspendedReason: string | null; isPlatformAdmin: boolean; activeSessions: number;
+  workspaces: { id: string; name: string; role: string }[];
+}
+export interface AdminCamera {
+  id: string; name: string; connectorType: string; manufacturer: string | null; model: string | null;
+  motionEnabled: boolean; createdAt: string; recording: boolean; motionEvents: number;
+  tenant: { id: string; name: string; suspendedAt: string | null };
+}
+export interface AdminAuditEntry {
+  id: string; action: string; targetType: string; targetId: string; metadata: Record<string, unknown> | null;
+  actorEmail: string | null; createdAt: string;
+}
+type Page<K extends string, T> = { total: number; page: number; pageSize: number } & Record<K, T[]>;
+export type AdminStatusFilter = "all" | "active" | "suspended";
+export interface AdminListParams { q?: string; page?: number; status?: AdminStatusFilter; type?: string }
+function adminQuery(params: AdminListParams = {}) {
+  const p = new URLSearchParams({ page: String(params.page ?? 1) });
+  if (params.q) p.set("q", params.q);
+  if (params.status && params.status !== "all") p.set("status", params.status);
+  if (params.type) p.set("type", params.type);
+  return p.toString();
+}
+export interface AdminSeriesPoint { day: string; cameras: number; storageBytes: number; alerts: number; recordings: number; newUsers: number }
+export interface AdminTimeseries {
+  days: number;
+  points: AdminSeriesPoint[];
+  trends: { cameras: number | null; storage: number | null; alerts: number | null; recordings: number | null; users: number | null };
+}
+export const adminStats = () => apiFetch<AdminStats>("/platform-admin/stats");
+export const adminTimeseries = (days = 30) => apiFetch<AdminTimeseries>(`/platform-admin/timeseries?days=${days}`);
+export const adminTenants = (p?: AdminListParams) => apiFetch<Page<"tenants", AdminTenant>>(`/platform-admin/tenants?${adminQuery(p)}`);
+export const adminUsers = (p?: AdminListParams) => apiFetch<Page<"users", AdminUser>>(`/platform-admin/users?${adminQuery(p)}`);
+export const adminCameras = (p?: AdminListParams) => apiFetch<Page<"cameras", AdminCamera>>(`/platform-admin/cameras?${adminQuery(p)}`);
+export const adminAudit = (page?: number) => apiFetch<{ entries: AdminAuditEntry[] }>(`/platform-admin/audit?${adminQuery({ page })}`);
+export function adminSetSuspended(kind: "tenants" | "users", id: string, suspend: boolean, reason?: string) {
+  return apiFetch<unknown>(`/platform-admin/${kind}/${id}/${suspend ? "suspend" : "unsuspend"}`, {
+    method: "POST",
+    body: JSON.stringify(suspend ? { reason } : {}),
   });
 }
 

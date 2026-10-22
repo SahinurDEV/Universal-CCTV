@@ -110,17 +110,16 @@ const envSchema = z.object({
     .enum(["true", "false", "1", "0"])
     .default("true")
     .transform((v) => v === "true" || v === "1"),
-  DETECTION_MODEL_PATH: z.string().default("models/ssd_mobilenet_v1_12.onnx"),
-  DETECTION_MODEL_URL: z
-    .string()
-    .url()
-    .default(
-      "https://github.com/onnx/models/raw/main/validated/vision/object_detection_segmentation/ssd-mobilenetv1/model/ssd_mobilenet_v1_12.onnx",
-    ),
-  // Download is rejected unless the file matches this hash. Empty = skip check.
-  DETECTION_MODEL_SHA256: z
-    .string()
-    .default("b8fba5e404077d4048d27fcd1667e85e27e192eb9bf51e696c46a3acd7d21058"),
+  // Which detector to run (see lib/detector.ts MODELS):
+  //   ssd-mobilenet-v1  default; fast (~20 ms/frame), less accurate
+  //   rtdetr-r18        optional; RT-DETR R18 (Apache-2.0), ~10x slower on
+  //                     CPU but noticeably more accurate (small/far objects)
+  DETECTION_MODEL: z.enum(["ssd-mobilenet-v1", "rtdetr-r18"]).default("ssd-mobilenet-v1"),
+  // Optional overrides of the selected model's built-in path/URL/checksum.
+  DETECTION_MODEL_PATH: z.string().optional(),
+  DETECTION_MODEL_URL: z.string().url().optional(),
+  // Download is rejected unless the file matches this hash ("" = skip check).
+  DETECTION_MODEL_SHA256: z.string().optional(),
   DETECTION_AUTO_DOWNLOAD: z
     .enum(["true", "false", "1", "0"])
     .default("true")
@@ -139,6 +138,9 @@ const envSchema = z.object({
   // base64-encoded content. Neither set = FCM disabled.
   FCM_SERVICE_ACCOUNT_FILE: z.string().optional(),
   FCM_SERVICE_ACCOUNT_BASE64: z.string().optional(),
+  // Comma-separated emails that are platform super-admins (in addition to
+  // users granted with `pnpm --filter @cctv/api admin:grant <email>`).
+  PLATFORM_ADMIN_EMAILS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

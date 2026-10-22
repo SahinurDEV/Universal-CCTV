@@ -171,8 +171,9 @@ publicShareRouter.use((_req, res, next) => {
 publicShareRouter.post("/:token/open", shareOpenRateLimiter, asyncHandler(async (req, res) => {
   const token = String(req.params.token ?? "");
   if (!verifyLinkToken(token)) return res.status(404).json(GONE);
-  const link = await prisma.shareLink.findUnique({ where: { tokenHash: hashLinkToken(token) }, include: { camera: { select: { name: true } } } });
-  if (!link || !usable(link)) return res.status(404).json(GONE);
+  const link = await prisma.shareLink.findUnique({ where: { tokenHash: hashLinkToken(token) }, include: { camera: { select: { name: true } }, tenant: { select: { suspendedAt: true } } } });
+  // Suspended workspaces (platform admin) can't be reached through share links either.
+  if (!link || !usable(link) || link.tenant.suspendedAt) return res.status(404).json(GONE);
   if (link.maxViews !== null && link.viewCount >= link.maxViews) return res.status(404).json(GONE);
   const password = typeof req.body?.password === "string" ? req.body.password.slice(0, 128) : "";
   if (link.passwordHash) {
@@ -213,8 +214,8 @@ publicShareRouter.post("/:token/open", shareOpenRateLimiter, asyncHandler(async 
 async function linkForView(viewToken: string, kind: "LIVE" | "CLIP") {
   const v = verifyViewToken(viewToken);
   if (!v) return null;
-  const link = await prisma.shareLink.findUnique({ where: { id: v.linkId } });
-  if (!link || link.kind !== kind || !usable(link)) return null;
+  const link = await prisma.shareLink.findUnique({ where: { id: v.linkId }, include: { tenant: { select: { suspendedAt: true } } } });
+  if (!link || link.kind !== kind || !usable(link) || link.tenant.suspendedAt) return null;
   return link;
 }
 

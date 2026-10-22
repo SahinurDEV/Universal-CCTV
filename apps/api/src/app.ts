@@ -22,6 +22,9 @@ import { cameraMotionRouter, motionEventsRouter } from "./routes/motion.js";
 import { invitesRouter, membersRouter } from "./routes/invites.js";
 import { pushRouter } from "./routes/push.js";
 import { retentionRouter } from "./routes/retention.js";
+import { ptzRouter } from "./routes/ptz.js";
+import { workspaceRouter } from "./routes/workspace.js";
+import { platformAdminRouter } from "./routes/platform-admin.js";
 import { cameraShareRouter, publicShareRouter, shareAdminRouter } from "./routes/share.js";
 import { originCheck } from "./middleware/origin-check.js";
 import { globalApiRateLimiter } from "./middleware/rateLimit.js";
@@ -66,6 +69,7 @@ export function createApp() {
   app.use("/cameras", cameraShareRouter);
   app.use("/shares", shareAdminRouter);
   app.use("/cameras", cameraMotionRouter);
+  app.use("/cameras", ptzRouter);
   app.use("/cameras", camerasRouter);
   app.use("/cameras", recordingRouter);
   app.use("/cameras", playbackRouter);
@@ -77,6 +81,8 @@ export function createApp() {
   app.use("/members", membersRouter);
   app.use("/push", pushRouter);
   app.use("/retention", retentionRouter);
+  app.use("/workspace", workspaceRouter);
+  app.use("/platform-admin", platformAdminRouter);
   app.use("/retention-policies", retentionPoliciesRouter);
   app.use("/storage", storageRouter);
   app.use("/subscription", subscriptionRouter);

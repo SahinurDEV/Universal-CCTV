@@ -16,6 +16,8 @@ class ApiException implements Exception {
         'forbidden' => 'You do not have permission to do that.',
         'not_found' => 'Not found.',
         'network' => 'Cannot reach the server. Check the address and your connection.',
+        'account_suspended' => 'This account has been suspended. Contact support.',
+        'tenant_suspended' => 'This workspace has been suspended by the platform operator.',
         'fcm_disabled' => 'Push notifications are not configured on this server.',
         _ => message ?? 'Request failed ($code).',
       };
@@ -121,6 +123,17 @@ class ApiClient {
     return resolve(j['playlistUrl'] as String);
   }
 
+  Future<PtzInfo> ptz(String id) async => PtzInfo.fromJson(await _json('GET', '/cameras/$id/ptz'));
+
+  /// Velocities -1..1. The camera stops by itself after [timeoutMs].
+  Future<void> ptzMove(String id, {double x = 0, double y = 0, double zoom = 0, int timeoutMs = 1500}) =>
+      _req('POST', '/cameras/$id/ptz/move', data: {'x': x, 'y': y, 'zoom': zoom, 'timeoutMs': timeoutMs});
+
+  Future<void> ptzStop(String id) => _req('POST', '/cameras/$id/ptz/stop', data: const <String, dynamic>{});
+
+  Future<void> ptzGotoPreset(String id, String token) =>
+      _req('POST', '/cameras/$id/ptz/presets/${Uri.encodeComponent(token)}/goto', data: const <String, dynamic>{});
+
   /// Creates a public share link; the URL (with token) is returned only once.
   Future<String> createShareLink(String cameraId,
       {required String kind, required int expiresInMinutes, DateTime? clipStart, DateTime? clipEnd, String? password, int? maxViews}) async {
@@ -140,6 +153,11 @@ class ApiClient {
 
   Future<MotionSettings> updateMotionSettings(String id, MotionSettings s) async =>
       MotionSettings.fromJson(await _json('PUT', '/cameras/$id/motion', data: s.toJson()));
+
+  Future<DetectionConfig> detectionConfig(String id) async => DetectionConfig.fromJson(await _json('GET', '/cameras/$id/detection'));
+
+  /// URL of a fresh camera frame (fetch it with [authHeaders]).
+  String snapshotJpegUrl(String id) => resolve('/cameras/$id/snapshot.jpg');
 
   Future<List<String>> recordingDates(String id) async =>
       [for (final d in (await _json('GET', '/cameras/$id/recordings/dates'))['dates'] as List? ?? const []) d as String];

@@ -107,7 +107,7 @@ accountRouter.get("/sessions", asyncHandler(async (req, res) => {
   const sessions = await prisma.session.findMany({
     where: { userId: req.authUser!.id, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { lastUsedAt: "desc" },
-    select: { id: true, createdAt: true, lastUsedAt: true, expiresAt: true },
+    select: { id: true, createdAt: true, lastUsedAt: true, expiresAt: true, clientType: true, deviceName: true },
   });
   res.json({
     sessions: sessions.map((s) => ({ ...s, current: s.id === req.authSession!.id })),

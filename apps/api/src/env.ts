@@ -133,6 +133,12 @@ const envSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().default("mailto:admin@localhost"),
+
+  // --- Firebase Cloud Messaging (native mobile app push) ---
+  // Service-account JSON for the Firebase project, either as a file path or
+  // base64-encoded content. Neither set = FCM disabled.
+  FCM_SERVICE_ACCOUNT_FILE: z.string().optional(),
+  FCM_SERVICE_ACCOUNT_BASE64: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

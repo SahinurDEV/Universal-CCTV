@@ -76,6 +76,12 @@ void main() {
       expect(c.thresholdFor('vehicle'), 0.8);
       expect(c.thresholdFor('person'), 0.5);
     });
+    test('Tenant suspended flag and suspension errors', () {
+      expect(Tenant.fromJson({'id': 't', 'name': 'n', 'role': 'OWNER', 'suspended': true}).suspended, isTrue);
+      expect(Tenant.fromJson({'id': 't', 'name': 'n'}).suspended, isFalse);
+      expect(ApiException(403, 'account_suspended').friendly, contains('suspended'));
+      expect(ApiException(403, 'tenant_suspended').friendly, contains('suspended'));
+    });
     test('Camera reads capability flags', () {
       final c = Camera.fromJson({
         'id': 'c', 'name': 'Cam', 'connectorType': 'ONVIF', 'host': 'h', 'motionEnabled': true,

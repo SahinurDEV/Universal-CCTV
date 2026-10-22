@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
 
-Future<(MemoryAppStorage, List<FakeApi>)> pumpApp(WidgetTester tester, {Map<String, String>? stored, Size size = const Size(400, 800)}) async {
+Future<(MemoryAppStorage, List<FakeApi>)> pumpApp(WidgetTester tester, {Map<String, String>? stored, Size size = const Size(400, 800), bool suspended = false}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -17,7 +17,7 @@ Future<(MemoryAppStorage, List<FakeApi>)> pumpApp(WidgetTester tester, {Map<Stri
     overrides: [
       storageProvider.overrideWithValue(storage),
       apiClientFactoryProvider.overrideWithValue((url, token, _) {
-        final a = FakeApi(token: token);
+        final a = FakeApi(token: token, suspended: suspended);
         apis.add(a);
         return a;
       }),
@@ -140,5 +140,10 @@ void main() {
     expect(find.textContaining('Alerts on schedule (Asia/Dhaka)'), findsOneWidget);
     expect(find.textContaining('Mon, Tue, Wed, Thu, Fri 22:00–06:00'), findsOneWidget);
     expect(find.textContaining('people 70%, vehicles 50%'), findsOneWidget);
+  });
+
+  testWidgets('suspended workspace shows a banner', (tester) async {
+    await pumpApp(tester, stored: {StorageKeys.serverUrl: 'https://cctv.test', StorageKeys.token: testToken}, suspended: true);
+    expect(find.byKey(const Key('suspendedBanner')), findsOneWidget);
   });
 }

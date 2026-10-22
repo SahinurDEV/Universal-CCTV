@@ -140,7 +140,7 @@ export async function checkMotionForAllCameras(
 ): Promise<MotionCheckResult> {
   const env = loadEnv();
   const cameras = await prisma.camera.findMany({
-    where: { motionEnabled: true, ...(cameraIds ? { id: { in: cameraIds } } : {}) },
+    where: { motionEnabled: true, tenant: { suspendedAt: null }, ...(cameraIds ? { id: { in: cameraIds } } : {}) },
     include: { credential: true, tenant: { select: { timezone: true } } },
   });
   const result: MotionCheckResult = { checked: 0, detected: 0, failed: 0 };

@@ -294,3 +294,19 @@ all other sessions.
   logged.
 - **Not done:** certificate pinning in the app; push payloads contain only
   ids and the alert text (no snapshot URL).
+
+## Platform admin (feature/platform-admin)
+
+- The role lives in `users.is_platform_admin` (written only by the
+  `admin:grant` CLI) or `PLATFORM_ADMIN_EMAILS`. No route accepts it as
+  input; a test confirms that profile updates ignore it.
+- `requirePlatformAdmin` re-reads the user on every request, so revoking the
+  role takes effect immediately. It refuses suspended users and mobile bearer
+  sessions, and never consults workspace roles.
+- Admin list endpoints never return password hashes, camera hosts, RTSP
+  paths, credentials or tokens.
+- Suspend and unsuspend write the change and a `platform_audit_logs` row
+  (actor, target, reason, IP) in one transaction. They are rate-limited, and
+  admins can't suspend themselves or other admins.
+- User suspension revokes all sessions and FCM tokens. `requireAuth` also
+  rejects any session whose user is suspended, as a second check.

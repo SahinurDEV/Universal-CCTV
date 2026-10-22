@@ -138,6 +138,9 @@ const envSchema = z.object({
   // base64-encoded content. Neither set = FCM disabled.
   FCM_SERVICE_ACCOUNT_FILE: z.string().optional(),
   FCM_SERVICE_ACCOUNT_BASE64: z.string().optional(),
+  // Comma-separated emails that are platform super-admins (in addition to
+  // users granted with `pnpm --filter @cctv/api admin:grant <email>`).
+  PLATFORM_ADMIN_EMAILS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

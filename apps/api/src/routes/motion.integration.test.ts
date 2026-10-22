@@ -12,6 +12,7 @@ const tenantIds: string[] = [];
 const owner = request.agent(app);
 const other = request.agent(app);
 let cameraId = "";
+const noFrame = async () => ({ jpeg: null, detections: null });
 
 async function register(agent: ReturnType<typeof request.agent>, name: string) {
   const res = await agent
@@ -84,9 +85,9 @@ describe("motion settings API", () => {
 
 describe("motion worker", () => {
   it("records an event + a single MOTION_DETECTED alert when the score crosses the threshold", async () => {
-    const result = await checkMotionForAllCameras(async () => ({ maxScore: 0.9, frames: 16 }));
+    const result = await checkMotionForAllCameras(async () => ({ maxScore: 0.9, frames: 16 }), noFrame);
     expect(result.detected).toBeGreaterThanOrEqual(1);
-    await checkMotionForAllCameras(async () => ({ maxScore: 0.9, frames: 16 }));
+    await checkMotionForAllCameras(async () => ({ maxScore: 0.9, frames: 16 }), noFrame);
 
     const events = await owner.get(`/cameras/${cameraId}/motion/events`);
     expect(events.status).toBe(200);
@@ -103,12 +104,12 @@ describe("motion worker", () => {
 
   it("does not record anything below the threshold and stores sampler errors", async () => {
     const before = await prisma.motionEvent.count({ where: { cameraId } });
-    await checkMotionForAllCameras(async () => ({ maxScore: 0.0001, frames: 16 }));
+    await checkMotionForAllCameras(async () => ({ maxScore: 0.0001, frames: 16 }), noFrame);
     expect(await prisma.motionEvent.count({ where: { cameraId } })).toBe(before);
 
     await checkMotionForAllCameras(async () => {
       throw new Error("no frames received");
-    });
+    }, noFrame);
     const cam = await owner.get(`/cameras/${cameraId}/motion`);
     expect(cam.body.lastError).toContain("no frames");
     expect(cam.body.lastCheckedAt).not.toBeNull();
@@ -117,7 +118,7 @@ describe("motion worker", () => {
   it("skips disabled cameras", async () => {
     await owner.put(`/cameras/${cameraId}/motion`).send({ enabled: false });
     const before = await prisma.motionEvent.count({ where: { cameraId } });
-    await checkMotionForAllCameras(async () => ({ maxScore: 1, frames: 1 }));
+    await checkMotionForAllCameras(async () => ({ maxScore: 1, frames: 1 }), noFrame);
     expect(await prisma.motionEvent.count({ where: { cameraId } })).toBe(before);
   });
 });

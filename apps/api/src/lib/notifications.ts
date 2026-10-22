@@ -2,6 +2,7 @@ import type { NotificationType } from "@prisma/client";
 import { prisma } from "./db.js";
 import { dispatchNotificationToWebhooks } from "./webhooks.js";
 import { logger } from "./logger.js";
+import { dispatchNotificationToPush } from "./push.js";
 
 /**
  * Creates a notification unless one of the same type+target was already
@@ -18,6 +19,8 @@ export async function notifyOnce(input: {
   targetId: string | null;
   message: string;
   cooldownMinutes: number;
+  /** Linked MotionEvent id (detection alerts). */
+  eventId?: string | null;
 }): Promise<boolean> {
   const since = new Date(Date.now() - input.cooldownMinutes * 60 * 1000);
 
@@ -38,6 +41,7 @@ export async function notifyOnce(input: {
       type: input.type,
       targetId: input.targetId,
       message: input.message,
+      eventId: input.eventId ?? null,
     },
   });
   // Fire-and-forget: a slow or broken webhook must never delay or fail the
@@ -45,5 +49,6 @@ export async function notifyOnce(input: {
   void dispatchNotificationToWebhooks(created).catch((err) =>
     logger.warn({ err }, "webhook dispatch failed"),
   );
+  void dispatchNotificationToPush(created).catch((err) => logger.warn({ err }, "push dispatch failed"));
   return true;
 }

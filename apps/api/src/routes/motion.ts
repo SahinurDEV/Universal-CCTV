@@ -4,7 +4,10 @@ import { prisma } from "../lib/db.js";
 import { requireAuth, requireTenant, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { loadEnv } from "../env.js";
 import { MAX_SENSITIVITY, MIN_SENSITIVITY, sensitivityToThreshold } from "../lib/motion.js";
+import { ALERT_CLASSES } from "../lib/detector.js";
+import { getSignedPlaybackUrl } from "../lib/storage.js";
 
 /**
  * Motion detection settings and history.
@@ -25,6 +28,7 @@ const idSchema = z.string().uuid();
 const settingsSchema = z.object({
   enabled: z.boolean(),
   sensitivity: z.number().int().min(MIN_SENSITIVITY).max(MAX_SENSITIVITY).optional(),
+  alertClasses: z.array(z.enum(ALERT_CLASSES)).min(1).max(ALERT_CLASSES.length).optional(),
 });
 const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -35,6 +39,7 @@ function serializeSettings(c: {
   id: string;
   motionEnabled: boolean;
   motionSensitivity: number;
+  motionAlertClasses: string[];
   motionLastCheckedAt: Date | null;
   motionLastError: string | null;
 }) {
@@ -43,8 +48,25 @@ function serializeSettings(c: {
     enabled: c.motionEnabled,
     sensitivity: c.motionSensitivity,
     threshold: sensitivityToThreshold(c.motionSensitivity),
+    alertClasses: c.motionAlertClasses,
     lastCheckedAt: c.motionLastCheckedAt,
     lastError: c.motionLastError,
+  };
+}
+
+function serializeEvent(
+  e: { id: string; cameraId: string; score: number; threshold: number; detectedAt: Date; labels: unknown; snapshotKey: string | null },
+  cameraName: string,
+) {
+  return {
+    id: e.id,
+    cameraId: e.cameraId,
+    cameraName,
+    score: e.score,
+    threshold: e.threshold,
+    detectedAt: e.detectedAt,
+    labels: Array.isArray(e.labels) ? (e.labels as { label: string; category: string; score: number }[]) : null,
+    hasSnapshot: Boolean(e.snapshotKey),
   };
 }
 
@@ -70,6 +92,7 @@ cameraMotionRouter.put("/:id/motion", ...auth, requireRole("OWNER", "ADMIN", "OP
     data: {
       motionEnabled: parsed.data.enabled,
       ...(parsed.data.sensitivity !== undefined ? { motionSensitivity: parsed.data.sensitivity } : {}),
+      ...(parsed.data.alertClasses ? { motionAlertClasses: [...new Set(parsed.data.alertClasses)] } : {}),
       ...(parsed.data.enabled ? {} : { motionLastError: null }),
     },
   });
@@ -79,7 +102,7 @@ cameraMotionRouter.put("/:id/motion", ...auth, requireRole("OWNER", "ADMIN", "OP
     action: "camera.motion.update",
     targetType: "Camera",
     targetId: camera.id,
-    metadata: { enabled: updated.motionEnabled, sensitivity: updated.motionSensitivity },
+    metadata: { enabled: updated.motionEnabled, sensitivity: updated.motionSensitivity, alertClasses: updated.motionAlertClasses },
   });
   res.json(serializeSettings(updated));
 }));
@@ -95,7 +118,7 @@ cameraMotionRouter.get("/:id/motion/events", ...auth, asyncHandler(async (req, r
     take: q.data.limit,
   });
   res.json({
-    events: events.map((e) => ({ id: e.id, cameraId: e.cameraId, cameraName: camera.name, score: e.score, threshold: e.threshold, detectedAt: e.detectedAt })),
+    events: events.map((e) => serializeEvent(e, camera.name)),
   });
 }));
 
@@ -109,6 +132,15 @@ motionEventsRouter.get("/", asyncHandler(async (req, res) => {
     take: q.data.limit,
   });
   res.json({
-    events: events.map((e) => ({ id: e.id, cameraId: e.cameraId, cameraName: e.camera.name, score: e.score, threshold: e.threshold, detectedAt: e.detectedAt })),
+    events: events.map((e) => serializeEvent(e, e.camera.name)),
   });
+}));
+
+/** Short-lived signed URL for an event's snapshot JPEG (any role, own tenant). */
+motionEventsRouter.get("/:id/snapshot", asyncHandler(async (req, res) => {
+  const id = idSchema.safeParse(req.params.id);
+  if (!id.success) return res.status(404).json({ error: "not_found" });
+  const event = await prisma.motionEvent.findFirst({ where: { id: id.data, tenantId: req.authTenant!.id } });
+  if (!event?.snapshotKey) return res.status(404).json({ error: "not_found" });
+  res.json({ url: await getSignedPlaybackUrl(event.snapshotKey), expiresInSeconds: loadEnv().SIGNED_URL_TTL_SECONDS });
 }));

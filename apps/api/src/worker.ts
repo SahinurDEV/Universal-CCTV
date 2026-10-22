@@ -83,7 +83,7 @@ const worker = new Worker(
       await pollActiveRecordings();
     } else if (job.name === "retention") {
       const result = await enforceRetention();
-      if (result.markedExpired > 0 || result.deleted > 0 || result.failed > 0) {
+      if (result.markedExpired > 0 || result.deleted > 0 || result.failed > 0 || result.purgedRows > 0 || result.motionEventsDeleted > 0) {
         logger.info(result, "retention enforcement run");
       }
       // Tenant-wide, not per-camera — a failed delete isn't attributed to a

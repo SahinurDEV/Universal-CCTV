@@ -236,3 +236,30 @@ all other sessions.
 - **Dependencies**: `postcss` (via next) and `postcss-selector-parser` are
   overridden to patched versions. Remaining: `braces` (dev-only, via
   eslint-config-next → fast-glob → micromatch) has no patched release.
+
+## Detection, push and retention (feature/smart-detection-push-retention)
+
+- **Object detection** runs locally (onnxruntime-node, CPU). No frames
+  leave the deployment. The model is downloaded over HTTPS to a temp file and
+  only used if its SHA-256 matches `DETECTION_MODEL_SHA256`; it is never
+  committed. Frame capture uses ffmpeg with an argv array (no shell), reads
+  through MediaMTX on loopback after the SSRF check, and never logs the
+  stream URL.
+- **Snapshots** are private objects under `snapshots/tenants/{tenant}/…`
+  (outside the recordings prefix, so orphan reconciliation can't touch
+  them), served only through short-lived signed URLs from a tenant-scoped,
+  authenticated endpoint. They are deleted with their motion event by
+  retention (default 30 days). CSP `img-src` allows the signed-URL origins.
+- **Web Push**: VAPID private key is server-only (never returned; `/push/config`
+  exposes only the public key). Missing/invalid keys disable push without
+  affecting anything else. Push endpoints come from the browser but are
+  still untrusted: https only and the same DNS-resolved SSRF guard as
+  webhooks, at subscribe *and* send time. Subscriptions are per user
+  (others' devices 404), max 20 per user, the full endpoint URL is never
+  shown back, 404/410 responses prune dead subscriptions, and payloads
+  carry only the alert title/message and a same-origin path (the service
+  worker refuses to open anything else). Push respects muted alert types.
+- **Retention settings**: OWNER/ADMIN only, tenant-scoped, capped by the
+  plan's max retention, audit-logged. Deletion is storage first, then
+  database (a failed object delete is retried, never orphaned).
+- Two-step login / 2FA is intentionally not part of this release.

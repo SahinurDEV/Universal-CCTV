@@ -270,4 +270,45 @@ v2.40 CLI (`docker compose config -q`), every image tag was confirmed to
 exist on Docker Hub, and ports/env/healthchecks were checked against the
 app config.
 
+## Added in feature/smart-detection-push-retention
+
+- Unit: `detector.test.ts` (SSD output parsing, class filtering, alert
+  decision incl. detector-unavailable fallback), `push.test.ts` (no VAPID
+  keys → disabled, dispatch no-op), `retention.test.ts` (effective days).
+- `detection.integration.test.ts`: alert classes validation; person-only
+  camera ignores a car and raises PERSON_DETECTED with labels and a
+  snapshot stored in S3 (bytes fetched back via the signed URL; other tenant
+  404, anonymous 401); vehicle class; "any" → plain motion; detector
+  unavailable → MOTION_DETECTED fallback. Plus a **real model** test: SSD
+  MobileNet finds a person in a real photo (runs when the model is
+  downloaded and `/tmp/od/bus.jpg` or `DETECTION_TEST_IMAGE` exists;
+  otherwise skipped).
+- `push.integration.test.ts` (web-push library mocked, DNS for the push host
+  mocked because this sandbox resolves public names to 198.18/15): config
+  exposes only the public key; subscribe/list (endpoint hidden)/delete;
+  SSRF rejection (http, loopback, metadata, localhost); cross-user delete
+  404; dispatch respects muted types; 410 prunes the subscription; test push.
+- `retention-settings.integration.test.ts`: validation, VIEWER 403, plan
+  cap 402, camera override tenant-scoped; worker deletes segments older
+  than workspace days / camera override from S3, keeps newer ones, deletes
+  old motion events and snapshots, and purges DELETED rows after a day.
+
+**Detection smoke test (manual, performed):** download the model
+(`pnpm --filter @cctv/api model:download`), then publish a looping photo
+with people as a fake camera (slight pan so motion fires):
+
+```bash
+curl -L -o /tmp/od/bus.jpg https://ultralytics.com/images/bus.jpg
+ffmpeg -re -loop 1 -framerate 15 -i /tmp/od/bus.jpg \
+  -vf "scale=640:-2,crop=600:ih:'20+20*sin(t*2)':0,format=yuv420p" \
+  -c:v libx264 -preset ultrafast -tune zerolatency -g 30 \
+  -f rtsp rtsp://127.0.0.1:8554/people
+```
+
+SIMULATED camera with path `people`, motion on, alert class People →
+events labelled `person, person, bus` with snapshots, and PERSON_DETECTED
+alerts ("Person detected (2× person, bus)"). The moving test pattern
+camera, also People-only, logged motion events with no labels and raised
+no alert. About 1 in 4 samples found nothing (pan/encode variation).
+
 Running without Docker: see docs/local-testing.md (§2B, `scripts/local-services.sh`).

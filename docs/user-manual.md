@@ -209,7 +209,68 @@ shows "Last check failed" with the reason.
 
 ---
 
+## 7B. People and vehicle alerts
+
+When motion is detected, the server takes a snapshot and checks it for
+**people** and **vehicles** (car, bus, truck, motorcycle, bicycle) using a
+small AI model that runs on the server's CPU. Nothing is sent to an outside
+AI service.
+
+On the camera page, under **Motion detection → Alert me about**, tick:
+
+- **People**: alert only when a person is seen.
+- **Vehicles**: alert only when a vehicle is seen.
+- **Any motion**: alert on every movement, labelled "Person detected" or
+  "Vehicle detected" when one was seen.
+
+Every detection is listed with its labels (for example "person 97%") and a
+**snapshot thumbnail**. Click the thumbnail to open the full image. Alerts
+show the thumbnail too. "Person detected" and "Vehicle detected" are
+separate alert types, so you can mute them separately in **Settings → Alert
+preferences**.
+
+If the AI model isn't available on the server, you still get plain
+**"Motion detected"** alerts, even if only People is ticked, so nothing is
+silently missed. The detector can miss people who are very small, far away,
+or in the dark.
+
+---
+
+## 7C. Push notifications on your phone
+
+1. Open the dashboard on your phone (on iPhone, first use Share → **Add to
+   Home Screen** and open it from the home screen; iOS 16.4 or later).
+2. Go to **Settings → Phone & browser notifications** and tap **Turn on for
+   this device**. Allow notifications when asked.
+3. Tap **Send test notification** to check that it works.
+
+Each phone or browser shows up in the list. Tap **Remove** to stop alerts
+to a device you no longer use. Push alerts follow your **Alert
+preferences**: a muted alert type is not pushed either. Tapping a
+notification opens the related camera or the Alerts page.
+
+---
+
 ## 8. Storage and retention (how long video is kept)
+
+### 8.1 Retention in days (Storage & retention page)
+
+- **Keep recordings for (whole workspace)**: for example 30 days. Owners and
+  admins can change it, up to your plan's limit.
+- **Per camera**: type days in a camera's row to override the workspace
+  setting (for example keep the front door for 60 days and the parking lot
+  for 7). Leave it empty to use the workspace setting.
+- Leave the workspace value empty to use the older per-camera retention
+  *policies* (below).
+- Older recordings are deleted from cloud storage and the database
+  automatically, about once a minute. Shortening retention also removes
+  existing older video, so double-check before saving.
+- Motion snapshots follow the same number of days (30 days if nothing is
+  set).
+- The page shows total storage used, and storage and the oldest recording
+  for each camera.
+
+### 8.2 Retention policies
 
 - **Storage** shows how much space each camera uses.
 - Each camera has a **retention policy** — 7, 30 or 90 days. Older recordings

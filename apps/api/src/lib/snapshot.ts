@@ -39,6 +39,9 @@ export function captureJpeg(streamUrl: string): Promise<Buffer> {
   const args = [
     "-hide_banner", "-nostdin", "-loglevel", "error",
     ...(streamUrl.startsWith("rtsp") ? ["-rtsp_transport", "tcp"] : []),
+    // Decode keyframes only: joining a live stream mid-GOP otherwise yields
+    // a half-grey/smeared first frame, which hurts detection.
+    "-skip_frame", "nokey",
     "-i", streamUrl,
     "-frames:v", "1", "-vf", "scale='min(640,iw)':-2", "-q:v", "5",
     "-f", "mjpeg", "-",

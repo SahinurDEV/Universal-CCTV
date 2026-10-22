@@ -29,6 +29,19 @@ docs/deployment.md for running this anywhere but here.
 
 ## What's implemented so far
 
+- **People & vehicle detection**: when motion fires, a snapshot is taken and
+  run through SSD MobileNet v1 (COCO, Apache-2.0) on CPU via
+  onnxruntime-node; per-camera alert classes (person / vehicle / any);
+  labels and a snapshot thumbnail (stored in object storage) on every
+  event; falls back to plain motion alerts when the model is unavailable.
+  Model is downloaded (checksum-verified) by `pnpm --filter @cctv/api
+  model:download` or on first use, never committed.
+- **Web Push**: VAPID + service worker; per-device subscribe/list/remove in
+  Settings; follows alert preferences; disabled safely when keys are unset.
+- **Retention in days**: per workspace with per-camera override, enforced
+  retroactively by the worker (storage + database), storage usage per
+  camera.
+
 - **Motion-detection alerts**: per-camera on/off + sensitivity; a worker
   samples each enabled camera through MediaMTX with ffmpeg's scene-change
   filter, stores every detection, and raises a rate-limited

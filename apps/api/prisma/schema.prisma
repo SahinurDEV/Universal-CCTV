@@ -28,6 +28,8 @@ model Tenant {
   gatewayDevices   GatewayDevice[]
   integrationConfigs IntegrationConfig[]
   recordingSegments RecordingSegment[]
+  motionEvents     MotionEvent[]
+  invites          Invite[]
 
   @@map("tenants")
 }
@@ -45,6 +47,7 @@ model User {
   memberships  Membership[]
   auditLogs    AuditLog[]
   sessions     Session[]
+  invitesSent  Invite[]
 
   @@map("users")
 }
@@ -152,6 +155,13 @@ model Camera {
   recordingSegments RecordingSegment[]
   retentionPolicy  RetentionPolicy? @relation(fields: [retentionPolicyId], references: [id])
   retentionPolicyId String? @map("retention_policy_id")
+  /// Motion detection (ffmpeg scene-change sampling in the worker).
+  motionEnabled     Boolean  @default(false) @map("motion_enabled")
+  /// 1 (least sensitive) .. 100 (most sensitive).
+  motionSensitivity Int      @default(50) @map("motion_sensitivity")
+  motionLastCheckedAt DateTime? @map("motion_last_checked_at")
+  motionLastError   String?  @map("motion_last_error")
+  motionEvents      MotionEvent[]
 
   @@index([tenantId])
   @@index([locationId])
@@ -384,6 +394,7 @@ enum NotificationType {
   STORAGE_QUOTA_WARNING
   UPLOAD_FAILURE
   RETENTION_CLEANUP_FAILURE
+  MOTION_DETECTED
 }
 
 model Notification {
@@ -474,4 +485,46 @@ model IntegrationConfig {
 
   @@index([tenantId])
   @@map("integration_configs")
+}
+
+/// One detected motion burst on a camera (every detection is stored; the
+/// alert/notification for it is rate-limited separately by notifyOnce).
+model MotionEvent {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  cameraId  String   @map("camera_id")
+  /// Highest ffmpeg scene-change score (0..1) seen in the sample window.
+  score     Float
+  /// Threshold that was in effect (derived from the camera's sensitivity).
+  threshold Float
+  detectedAt DateTime @default(now()) @map("detected_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, detectedAt])
+  @@index([cameraId, detectedAt])
+  @@map("motion_events")
+}
+
+/// Workspace invitation. Only a SHA-256 hash of the token is stored; the raw
+/// token appears once, in the emailed/logged accept link.
+model Invite {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  email       String
+  role        Role
+  tokenHash   String    @unique @map("token_hash")
+  invitedById String?   @map("invited_by_id")
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy User?  @relation(fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([email])
+  @@map("invites")
 }

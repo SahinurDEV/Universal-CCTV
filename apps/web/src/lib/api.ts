@@ -90,6 +90,8 @@ export interface Camera {
   createdAt: string;
   updatedAt: string;
   hasCredential: boolean;
+  motionEnabled: boolean;
+  motionSensitivity: number;
   capability: CameraCapability | null;
   connectionImplemented: boolean;
 }
@@ -274,7 +276,13 @@ export function cancelSubscription() {
 
 export interface Notification {
   id: string;
-  type: "CAMERA_OFFLINE" | "RECORDING_STOPPED" | "STORAGE_QUOTA_WARNING" | "UPLOAD_FAILURE" | "RETENTION_CLEANUP_FAILURE";
+  type:
+    | "CAMERA_OFFLINE"
+    | "RECORDING_STOPPED"
+    | "STORAGE_QUOTA_WARNING"
+    | "UPLOAD_FAILURE"
+    | "RETENTION_CLEANUP_FAILURE"
+    | "MOTION_DETECTED";
   targetId: string | null;
   message: string;
   readAt: string | null;
@@ -439,6 +447,110 @@ export function setNotificationPreferences(mutedTypes: Notification["type"][]) {
     "/account/notification-preferences",
     { method: "PUT", body: JSON.stringify({ mutedTypes }) },
   );
+}
+
+// --- Motion detection ------------------------------------------------------
+
+export interface MotionSettings {
+  cameraId: string;
+  enabled: boolean;
+  sensitivity: number;
+  threshold: number;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+}
+
+export interface MotionEvent {
+  id: string;
+  cameraId: string;
+  cameraName: string;
+  score: number;
+  threshold: number;
+  detectedAt: string;
+}
+
+export function getMotionSettings(cameraId: string) {
+  return apiFetch<MotionSettings>(`/cameras/${cameraId}/motion`);
+}
+
+export function setMotionSettings(cameraId: string, input: { enabled: boolean; sensitivity?: number }) {
+  return apiFetch<MotionSettings>(`/cameras/${cameraId}/motion`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function listCameraMotionEvents(cameraId: string, limit = 20) {
+  return apiFetch<{ events: MotionEvent[] }>(`/cameras/${cameraId}/motion/events?limit=${limit}`);
+}
+
+export function listMotionEvents(limit = 50) {
+  return apiFetch<{ events: MotionEvent[] }>(`/motion-events?limit=${limit}`);
+}
+
+// --- Team: members + invites ----------------------------------------------
+
+export type Role = TenantMembership["role"];
+
+export interface Member {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  role: Role;
+  joinedAt: string;
+}
+
+export interface Invite {
+  id: string;
+  email: string;
+  role: Role;
+  state: "pending" | "accepted" | "revoked" | "expired";
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  invitedBy: string | null;
+}
+
+export function listMembers() {
+  return apiFetch<{ currentUserId: string; currentRole: Role; members: Member[] }>("/members");
+}
+
+export function changeMemberRole(userId: string, role: Role) {
+  return apiFetch<{ userId: string; role: Role }>(`/members/${userId}`, { method: "PATCH", body: JSON.stringify({ role }) });
+}
+
+export function removeMember(userId: string) {
+  return apiFetch<void>(`/members/${userId}`, { method: "DELETE" });
+}
+
+export function listInvites() {
+  return apiFetch<{ invites: Invite[]; mailConfigured: boolean }>("/invites");
+}
+
+export function createInvite(email: string, role: Role) {
+  return apiFetch<{ invite: Invite; acceptUrl: string; emailSent: boolean }>("/invites", {
+    method: "POST",
+    body: JSON.stringify({ email, role }),
+  });
+}
+
+export function revokeInvite(id: string) {
+  return apiFetch<void>(`/invites/${id}`, { method: "DELETE" });
+}
+
+export function previewInvite(token: string) {
+  return apiFetch<{ email: string; role: Role; workspaceName: string; expiresAt: string; accountExists: boolean }>(
+    `/invites/token/${encodeURIComponent(token)}`,
+  );
+}
+
+export function acceptInvite(input: { token: string; password?: string; displayName?: string }) {
+  return apiFetch<{ workspace: { id: string; name: string }; role: Role }>("/invites/accept", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function switchTenant(tenantId: string) {
+  return apiFetch<void>("/auth/switch-tenant", { method: "POST", body: JSON.stringify({ tenantId }) });
 }
 
 export function errorMessage(err: unknown, fallback: string): string {

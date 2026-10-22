@@ -9,8 +9,9 @@ import { enforceRetention } from "./recording/retention.js";
 import { checkCameraHealth, checkStorageQuotaWarnings } from "./recording/health.js";
 import { reconcileOrphanedObjects } from "./recording/reconciliation.js";
 import { notifyOnce } from "./lib/notifications.js";
+import { checkMotionForAllCameras } from "./recording/motion.js";
 
-loadEnv();
+const env = loadEnv();
 
 const QUEUE_NAME = "recording-ingestion";
 const POLL_INTERVAL_MS = 15_000;
@@ -22,6 +23,11 @@ const HEALTH_CHECK_INTERVAL_MS = 30_000;
 // Same tradeoff as above — a real deployment has no need to scan the whole
 // bucket this often; short here purely for dev-loop observability.
 const RECONCILIATION_INTERVAL_MS = 5 * 60_000;
+const MOTION_INTERVAL_MS = env.MOTION_CHECK_INTERVAL_SECONDS * 1000;
+// Motion sampling holds ffmpeg processes for several seconds; it gets its
+// own queue so it never delays recording ingestion.
+const MOTION_QUEUE_NAME = "motion-detection";
+const motionQueue = new Queue(MOTION_QUEUE_NAME, { connection: redis });
 
 const queue = new Queue(QUEUE_NAME, { connection: redis });
 
@@ -109,6 +115,18 @@ const worker = new Worker(
   { connection: redis },
 );
 
+const motionWorker = new Worker(
+  MOTION_QUEUE_NAME,
+  async () => {
+    const result = await checkMotionForAllCameras();
+    if (result.detected > 0 || result.failed > 0) logger.info(result, "motion check run");
+  },
+  { connection: redis },
+);
+motionWorker.on("failed", (job, err) => {
+  logger.error({ err, jobId: job?.id }, "motion worker job failed");
+});
+
 worker.on("failed", (job, err) => {
   logger.error({ err, jobId: job?.id }, "recording-ingestion worker job failed");
 });
@@ -118,8 +136,10 @@ async function start() {
   await queue.add("retention", {}, { repeat: { every: RETENTION_INTERVAL_MS }, jobId: "enforce-retention" });
   await queue.add("health-check", {}, { repeat: { every: HEALTH_CHECK_INTERVAL_MS }, jobId: "camera-health-check" });
   await queue.add("reconcile-storage", {}, { repeat: { every: RECONCILIATION_INTERVAL_MS }, jobId: "reconcile-storage" });
+  await motionQueue.add("motion-check", {}, { repeat: { every: MOTION_INTERVAL_MS }, jobId: "motion-check" });
   logger.info(
     {
+      motionIntervalMs: MOTION_INTERVAL_MS,
       pollIntervalMs: POLL_INTERVAL_MS,
       retentionIntervalMs: RETENTION_INTERVAL_MS,
       healthCheckIntervalMs: HEALTH_CHECK_INTERVAL_MS,
@@ -136,7 +156,9 @@ start().catch((err) => {
 
 async function shutdown() {
   await worker.close();
+  await motionWorker.close();
   await queue.close();
+  await motionQueue.close();
   process.exit(0);
 }
 

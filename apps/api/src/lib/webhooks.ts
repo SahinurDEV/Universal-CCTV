@@ -13,6 +13,7 @@ export const WEBHOOK_EVENT_TYPES = [
   "STORAGE_QUOTA_WARNING",
   "UPLOAD_FAILURE",
   "RETENTION_CLEANUP_FAILURE",
+  "MOTION_DETECTED",
 ] as const;
 
 export function generateWebhookSecret(): string {

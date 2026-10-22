@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LivePlayer } from "@/components/LivePlayer";
+import { MotionPanel } from "@/components/MotionPanel";
+import { useSession } from "@/lib/useSession";
 import { useParams, useRouter } from "next/navigation";
 import {
   ApiError,
@@ -37,6 +39,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
 export default function CameraDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const session = useSession();
   const [state, setState] = useState<State>({ status: "loading" });
   const [deleting, setDeleting] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -161,12 +164,17 @@ export default function CameraDetailPage() {
   if (state.status === "error") return <p className="text-red-400">Camera not found.</p>;
 
   const { camera } = state;
+  const role =
+    session.status === "authenticated"
+      ? session.session.tenants.find((t) => t.id === session.session.activeTenantId)?.role
+      : undefined;
+  const canEditMotion = role === "OWNER" || role === "ADMIN" || role === "OPERATOR";
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{camera.name}</h1>
-        <div className="flex gap-2">
+    <div className="max-w-2xl min-w-0 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="break-words text-2xl font-semibold">{camera.name}</h1>
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={onTestConnection}
             disabled={testing}
@@ -256,7 +264,7 @@ export default function CameraDetailPage() {
 
       <section className="rounded-lg border border-slate-800 p-4">
         <h2 className="mb-3 text-sm font-medium text-slate-400">Connection</h2>
-        <dl className="grid grid-cols-2 gap-y-2 text-sm">
+        <dl className="grid grid-cols-1 gap-y-2 text-sm sm:grid-cols-2">
           <dt className="text-slate-400">Connector type</dt>
           <dd>{camera.connectorType}</dd>
           <dt className="text-slate-400">Host</dt>
@@ -306,6 +314,8 @@ export default function CameraDetailPage() {
         </p>
       </section>
 
+      <MotionPanel cameraId={camera.id} canEdit={canEditMotion} />
+
       <section className="rounded-lg border border-slate-800 p-4">
         <h2 className="mb-3 text-sm font-medium text-slate-400">Capabilities</h2>
         <p className="mb-3 text-xs text-slate-500">
@@ -314,7 +324,7 @@ export default function CameraDetailPage() {
             <> — last checked {new Date(camera.capability.detectedAt).toLocaleString()}</>
           )}
         </p>
-        <ul className="grid grid-cols-2 gap-2 text-sm">
+        <ul className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           {Object.entries(CAPABILITY_LABELS).map(([key, label]) => {
             const supported = camera.capability
               ? Boolean((camera.capability as unknown as Record<string, unknown>)[key])

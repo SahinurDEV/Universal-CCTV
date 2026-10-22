@@ -6,6 +6,7 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   "STORAGE_QUOTA_WARNING",
   "UPLOAD_FAILURE",
   "RETENTION_CLEANUP_FAILURE",
+  "MOTION_DETECTED",
 ];
 
 export function mutedTypesFrom(prefs: unknown): NotificationType[] {

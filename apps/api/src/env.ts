@@ -79,6 +79,28 @@ const envSchema = z.object({
     .enum(["true", "false", "1", "0"])
     .default("false")
     .transform((v) => v === "true" || v === "1"),
+
+  // --- Motion detection (worker) ---
+  // The worker reads each motion-enabled camera through MediaMTX's RTSP
+  // server (never dials the camera a second time) and samples frames with
+  // ffmpeg's scene-change filter.
+  MEDIAMTX_RTSP_URL: z.string().default("rtsp://localhost:8554"),
+  FFMPEG_PATH: z.string().default("ffmpeg"),
+  MOTION_CHECK_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(3600).default(20),
+  MOTION_SAMPLE_SECONDS: z.coerce.number().int().min(1).max(30).default(4),
+  // Minimum minutes between two MOTION_DETECTED alerts for one camera
+  // (every detection is still stored as a MotionEvent).
+  MOTION_ALERT_COOLDOWN_MINUTES: z.coerce.number().int().min(0).max(1440).default(5),
+
+  // --- Invites / email ---
+  // Public URL of the web app; used to build invite accept links.
+  APP_PUBLIC_URL: z.string().url().default("http://localhost:3100"),
+  INVITE_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(72),
+  // Optional SMTP server, e.g. smtp://user:pass@smtp.example.com:587 . When
+  // unset, invite links are not emailed: they are shown once to the admin
+  // who created the invite (and logged in development only).
+  SMTP_URL: z.string().optional(),
+  MAIL_FROM: z.string().default("Universal CCTV <no-reply@localhost>"),
 });
 
 export type Env = z.infer<typeof envSchema>;

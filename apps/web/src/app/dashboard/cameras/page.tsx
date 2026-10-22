@@ -26,7 +26,7 @@ export default function CamerasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Cameras</h1>
         <button
           onClick={() => setShowForm((v) => !v)}
@@ -124,7 +124,7 @@ function DiscoverySection({ onPick }: { onPick: (device: DiscoveredDevice) => vo
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Find cameras automatically</p>
           <p className="text-xs text-slate-500">
@@ -239,7 +239,7 @@ function AddCameraForm({ onCreated }: { onCreated: () => void }) {
           watch it under Live View. See the user manual for the RTSP path of your camera brand.
         </p>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Name">
             <input required value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
           </Field>

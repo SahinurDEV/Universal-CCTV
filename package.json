@@ -22,6 +22,10 @@
       "msgpackr-extract",
       "prisma",
       "unrs-resolver"
-    ]
+    ],
+    "overrides": {
+      "postcss-selector-parser": "^7.1.6",
+      "next>postcss": "^8.5.31"
+    }
   }
 }

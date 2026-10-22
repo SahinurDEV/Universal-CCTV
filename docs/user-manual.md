@@ -183,6 +183,32 @@ camera offline, recording stopped, storage almost full, upload failed.
 
 ---
 
+## 7A. Motion detection alerts
+
+Each camera can watch for movement and alert you.
+
+1. Open **Cameras** → click the camera → **Motion detection**.
+2. Click **Turn on** (needs the Owner, Admin or Operator role).
+3. Move the **Sensitivity** slider (1–100) and click **Save sensitivity**.
+   - Start around **50–60**. If you get alerts from trees, rain or light
+     changes, lower it. If people walking past are missed, raise it.
+4. Detections appear in **Recent detections** on the camera page and in
+   **Alerts → Recent motion detections**. A **"Motion detected"** alert is
+   raised at most once every few minutes per camera (default 5), so a busy
+   scene doesn't flood you.
+5. Motion alerts follow your **Settings → Alert preferences** (you can mute
+   "Motion detected") and are sent to any **webhook** subscribed to
+   `MOTION_DETECTED` (section 10).
+
+How it works: every ~20 seconds the server looks at a few seconds of the
+camera's video at low resolution and measures how much the picture changes.
+This doesn't need any motion feature on the camera itself, and it works for
+any camera that live view works for. It is pixel-change detection, not
+person/vehicle recognition. If the camera can't be reached, the camera page
+shows "Last check failed" with the reason.
+
+---
+
 ## 8. Storage and retention (how long video is kept)
 
 - **Storage** shows how much space each camera uses.
@@ -212,6 +238,54 @@ A webhook sends every new alert to another service as a web request.
 3. Copy the **signing secret** shown once. Your server can use it to check the
    request really came from us (header `X-CCTV-Signature`).
 4. Click **Send test** to check it works.
+
+---
+
+## 10A. Team: inviting people
+
+Open **Team** in the menu.
+
+**Roles**
+
+| Role | Can do |
+|---|---|
+| Owner | Everything, including managing other owners |
+| Admin | Cameras, locations, integrations, team (but not owners) |
+| Operator | Add/edit cameras, recording, motion settings |
+| Viewer | Watch live video and recordings only |
+
+**Invite someone (Owner/Admin)**
+
+1. Type their email, pick a role, click **Send invite**.
+2. If the server has email set up, they get an email. If not, a link is
+   shown **once** — click **Copy link** and send it to them yourself
+   (WhatsApp, email, etc.).
+3. The link expires after 72 hours. Sending a new invite to the same email
+   cancels the old link.
+
+**Accepting an invite**
+
+- New to Universal CCTV: open the link, choose a password, click **Create
+  account & join**.
+- Already have an account: open the link, click **Sign in as …**, sign in
+  with that same email, and click **Join workspace**.
+- If you belong to more than one workspace, switch between them with the
+  dropdown under "Universal CCTV" at the top of the menu.
+
+**Managing the team**
+
+- Change someone's role with the dropdown next to their name.
+- **Remove** takes away their access immediately.
+- **Revoke** cancels an invite that hasn't been accepted yet.
+- A workspace always keeps at least one Owner.
+
+---
+
+## 10B. Using it on a phone
+
+The dashboard works in a phone browser. Tap **☰ Menu** at the top left to
+open the menu. Live View shows one camera per row on a phone; pick **4×4**
+for a compact 2-column grid. Wide tables scroll sideways.
 
 ---
 

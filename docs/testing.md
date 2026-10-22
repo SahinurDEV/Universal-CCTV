@@ -233,4 +233,41 @@ messages for exact commands):
 - `cameras.integration.test.ts`: connect-time SSRF check blocks a stored
   loopback host for test-connection, recording start and live start.
 
+## Added in feature/gaps-and-features
+
+- `src/lib/motion.test.ts` (unit): sensitivity→threshold mapping (range,
+  monotonic, clamping), ffmpeg `scene_score` parsing, argv-only ffmpeg args.
+- `src/lib/invites.test.ts` (unit): token generation/hashing, role rules
+  (who may grant/manage which role), invite state.
+- `src/routes/motion.integration.test.ts`: motion settings API (defaults,
+  validation, tenant isolation 404, VIEWER 403), worker pass with an
+  injected sampler → MotionEvent rows + exactly one MOTION_DETECTED alert
+  per cooldown, below-threshold no-op, error recorded, disabled skipped.
+- `src/routes/invites.integration.test.ts`: create → preview → accept with
+  new account (single use, hash-only storage), existing account must be
+  signed in as the invited email, RBAC (viewer/operator 403, admin can't
+  invite/manage owners), revoke/expire/re-invite, already-member 409,
+  last-owner protection, member removal cuts access, CSRF Origin check.
+
+**Motion smoke test (real ffmpeg, manual, performed):** with
+`scripts/local-services.sh` running, publish a second, *static* fake camera:
+
+```bash
+ffmpeg -re -f lavfi -i "smptebars=size=640x360:rate=15" -c:v libx264 \
+  -preset ultrafast -tune zerolatency -g 30 -f rtsp rtsp://127.0.0.1:8554/static
+```
+
+Add two SIMULATED cameras (host `localhost`, port 8554, path `simulated`
+and `static`), turn motion on at sensitivity 60, and start the worker
+(`MOTION_CHECK_INTERVAL_SECONDS=10 pnpm --filter @cctv/api worker`). Result:
+the moving test pattern produced a MotionEvent every check (peak scene
+score ≈0.022 vs threshold 0.0129) and one MOTION_DETECTED alert; the static
+camera produced none (score ≈0.000001).
+
+**docker-compose.yml:** Docker is not installed on the dev box, so the
+stack was *not* run. It was validated with the standalone `docker compose`
+v2.40 CLI (`docker compose config -q`), every image tag was confirmed to
+exist on Docker Hub, and ports/env/healthchecks were checked against the
+app config.
+
 Running without Docker: see docs/local-testing.md (§2B, `scripts/local-services.sh`).

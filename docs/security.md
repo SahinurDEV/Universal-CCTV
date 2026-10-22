@@ -207,3 +207,32 @@ New features were built with the same rules: tenant-scoped queries returning
 webhook secrets (shown once), webhook SSRF guard (no redirects, https-only in
 production, private ranges blocked in production), password change revoking
 all other sessions.
+
+## Invites, members and motion detection (feature/gaps-and-features)
+
+- **Invite tokens**: 256-bit random, base64url; only a SHA-256 hash is
+  stored. The raw link is returned once to the inviter (and emailed if SMTP
+  is configured); it is logged only when `NODE_ENV=development`. Tokens
+  expire (`INVITE_TTL_HOURS`, default 72), are single-use (consumed with a
+  conditional update inside a transaction, so concurrent accepts can't both
+  succeed), and re-inviting the same email revokes the previous link.
+  Invalid/expired/revoked/used tokens all return the same 404.
+- **Accepting**: an existing account must be signed in as the invited email
+  (no account takeover by link holders); a new account can only be created
+  for the invited email. Public token endpoints have their own rate limit;
+  invite creation is rate limited per IP. All state-changing endpoints are
+  covered by the existing Origin (CSRF) check.
+- **Roles**: only OWNER/ADMIN manage invites/members; ADMIN can't grant
+  OWNER or modify/remove owners; the last OWNER can't be demoted/removed.
+  Membership is re-checked on every request, so removal is immediate.
+- **Login `next=` redirect** only accepts same-site relative paths.
+- **Motion worker**: ffmpeg is spawned with an argv array (no shell); it
+  reads the camera through MediaMTX on loopback after the same DNS-resolved
+  SSRF check used for live view, so the camera isn't dialled twice. Error
+  messages stored on the camera have the stream URL (which can embed
+  credentials) scrubbed. Motion settings changes are audit-logged.
+- **docker-compose.yml**: Postgres, Redis and S3 are now bound to
+  127.0.0.1 (they use public dev credentials).
+- **Dependencies**: `postcss` (via next) and `postcss-selector-parser` are
+  overridden to patched versions. Remaining: `braces` (dev-only, via
+  eslint-config-next → fast-glob → micromatch) has no patched release.

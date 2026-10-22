@@ -98,7 +98,7 @@ export default function RecordingsPage() {
       )}
 
       {cameras && cameras.length > 0 && (
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
           <label className="block space-y-1">
             <span className="text-sm text-slate-400">Camera</span>
             <select

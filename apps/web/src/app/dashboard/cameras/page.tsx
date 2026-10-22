@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, createCamera, discoverCameras, listCameras, type Camera, type DiscoveredDevice } from "@/lib/api";
+import { ApiError, createCamera, discoverCameras, listCameras, listLocations, type Camera, type DiscoveredDevice, type Location } from "@/lib/api";
 
 type LoadState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; cameras: Camera[] };
 
@@ -183,6 +183,14 @@ function AddCameraForm({ onCreated }: { onCreated: () => void }) {
   const [path, setPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [locationId, setLocationId] = useState("");
+  const [locations, setLocations] = useState<Location[]>([]);
+
+  useEffect(() => {
+    listLocations()
+      .then((r) => setLocations(r.locations))
+      .catch(() => setLocations([]));
+  }, []);
 
   function applyDiscoveredDevice(device: DiscoveredDevice) {
     setConnectorType("ONVIF");
@@ -200,6 +208,7 @@ function AddCameraForm({ onCreated }: { onCreated: () => void }) {
         connectorType,
         host,
         port: Number(port),
+        locationId: locationId || undefined,
         credential: username || password || path ? { username, password, path } : undefined,
       });
       onCreated();
@@ -226,13 +235,23 @@ function AddCameraForm({ onCreated }: { onCreated: () => void }) {
       <form onSubmit={onSubmit} className="space-y-4 rounded-lg border border-slate-800 p-4">
         <p className="text-sm text-slate-400">
           This registers the camera's connection details. After adding it, use{" "}
-          <span className="text-slate-300">Test Connection</span> on the camera's page to actually verify
-          it — nothing connects automatically yet when you just add a camera here.
+          <span className="text-slate-300">Test Connection</span> on the camera's page to verify it, then
+          watch it under Live View. See the user manual for the RTSP path of your camera brand.
         </p>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Name">
             <input required value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Location (optional)">
+            <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputClass}>
+              <option value="">No location</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Connector type">
             <select

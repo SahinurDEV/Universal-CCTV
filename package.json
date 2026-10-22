@@ -13,5 +13,15 @@
     "lint": "pnpm -r lint",
     "prisma:generate": "pnpm --filter @cctv/api prisma:generate",
     "prisma:migrate": "pnpm --filter @cctv/api prisma:migrate"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma",
+      "unrs-resolver"
+    ]
   }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { LivePlayer } from "@/components/LivePlayer";
 import { useParams, useRouter } from "next/navigation";
 import {
   ApiError,
@@ -182,6 +183,8 @@ export default function CameraDetailPage() {
           </button>
         </div>
       </div>
+
+      <LivePlayer cameraId={camera.id} name={`${camera.name} — live`} />
 
       {testError && <p className="text-sm text-red-400">{testError}</p>}
 

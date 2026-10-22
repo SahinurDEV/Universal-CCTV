@@ -104,6 +104,7 @@ export function getCamera(id: string) {
 
 export interface CreateCameraInput {
   name: string;
+  locationId?: string;
   connectorType: "RTSP" | "ONVIF" | "SIMULATED";
   host: string;
   port: number;
@@ -290,4 +291,160 @@ export function markNotificationRead(id: string) {
 
 export function markAllNotificationsRead() {
   return apiFetch<void>("/notifications/read-all", { method: "POST" });
+}
+
+export { API_BASE_URL };
+
+// --- Live view -------------------------------------------------------------
+
+export function startLive(cameraId: string) {
+  return apiFetch<{ cameraId: string; protocol: "hls"; playlistUrl: string }>(`/cameras/${cameraId}/live/start`, {
+    method: "POST",
+  });
+}
+
+// --- Locations -------------------------------------------------------------
+
+export interface Location {
+  id: string;
+  name: string;
+  address: string | null;
+  timezone: string;
+  createdAt: string;
+  cameraCount: number;
+}
+
+export function listLocations() {
+  return apiFetch<{ locations: Location[] }>("/locations");
+}
+
+export function createLocation(input: { name: string; address?: string | null; timezone?: string }) {
+  return apiFetch<Location>("/locations", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateLocation(id: string, input: { name?: string; address?: string | null; timezone?: string }) {
+  return apiFetch<Location>(`/locations/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function deleteLocation(id: string) {
+  return apiFetch<void>(`/locations/${id}`, { method: "DELETE" });
+}
+
+export function assignCamerasToLocation(id: string, cameraIds: string[]) {
+  return apiFetch<{ assigned: number }>(`/locations/${id}/cameras`, {
+    method: "POST",
+    body: JSON.stringify({ cameraIds }),
+  });
+}
+
+export function setCameraLocation(cameraId: string, locationId: string | null) {
+  return apiFetch<Camera>(`/cameras/${cameraId}`, { method: "PATCH", body: JSON.stringify({ locationId }) });
+}
+
+// --- Integrations ----------------------------------------------------------
+
+export interface IntegrationCatalogItem {
+  key: string;
+  name: string;
+  status: "available" | "built_in" | "planned";
+  description: string;
+}
+
+export interface Integration {
+  id: string;
+  provider: "webhook";
+  name: string;
+  url: string | null;
+  events: string[];
+  isEnabled: boolean;
+  lastDeliveryAt: string | null;
+  lastDeliveryStatus: string | null;
+  createdAt: string;
+  signingSecret?: string;
+}
+
+export function listIntegrations() {
+  return apiFetch<{ catalog: IntegrationCatalogItem[]; eventTypes: string[]; integrations: Integration[] }>(
+    "/integrations",
+  );
+}
+
+export function createWebhook(input: { name: string; url: string; events: string[] }) {
+  return apiFetch<Integration>("/integrations", {
+    method: "POST",
+    body: JSON.stringify({ provider: "webhook", ...input }),
+  });
+}
+
+export function updateIntegration(
+  id: string,
+  input: { name?: string; url?: string; events?: string[]; isEnabled?: boolean; rotateSecret?: boolean },
+) {
+  return apiFetch<Integration>(`/integrations/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function deleteIntegration(id: string) {
+  return apiFetch<void>(`/integrations/${id}`, { method: "DELETE" });
+}
+
+export function testIntegration(id: string) {
+  return apiFetch<{ ok: boolean; status: number | null; error?: string }>(`/integrations/${id}/test`, {
+    method: "POST",
+  });
+}
+
+// --- Account / settings ----------------------------------------------------
+
+export interface AccountInfo {
+  user: { id: string; email: string; displayName: string | null; createdAt: string; passwordChangedAt: string | null };
+  memberships: { tenantId: string; tenantName: string; role: TenantMembership["role"] }[];
+}
+
+export function getAccount() {
+  return apiFetch<AccountInfo>("/account");
+}
+
+export function updateProfile(displayName: string | null) {
+  return apiFetch<{ user: AccountInfo["user"] }>("/account/profile", {
+    method: "PATCH",
+    body: JSON.stringify({ displayName }),
+  });
+}
+
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiFetch<{ ok: boolean; otherSessionsRevoked: number }>("/account/password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export function listSessions() {
+  return apiFetch<{ sessions: { id: string; createdAt: string; lastUsedAt: string; expiresAt: string; current: boolean }[] }>(
+    "/account/sessions",
+  );
+}
+
+export function revokeOtherSessions() {
+  return apiFetch<{ revoked: number }>("/account/sessions/revoke-others", { method: "POST" });
+}
+
+export function getNotificationPreferences() {
+  return apiFetch<{ types: Notification["type"][]; mutedTypes: Notification["type"][] }>(
+    "/account/notification-preferences",
+  );
+}
+
+export function setNotificationPreferences(mutedTypes: Notification["type"][]) {
+  return apiFetch<{ types: Notification["type"][]; mutedTypes: Notification["type"][] }>(
+    "/account/notification-preferences",
+    { method: "PUT", body: JSON.stringify({ mutedTypes }) },
+  );
+}
+
+export function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { message?: string; error?: string; details?: { message?: string }[] } | undefined;
+    return body?.message ?? body?.details?.[0]?.message ?? body?.error ?? fallback;
+  }
+  return fallback;
 }

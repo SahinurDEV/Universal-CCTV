@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
-import { createSession, findValidSession, revokeSession, setActiveTenant, SESSION_COOKIE_NAME } from "../lib/sessions.js";
+import { createSession, revokeSession, setActiveTenant, SESSION_COOKIE_NAME } from "../lib/sessions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { requireAuth } from "../middleware/auth.js";
 import { authRateLimiter } from "../middleware/rateLimit.js";
@@ -24,10 +24,26 @@ function cookieOptions() {
   };
 }
 
+// bcrypt only uses the first 72 bytes of a password, and very long inputs
+// are a cheap CPU DoS against the hashing step, so cap the length.
+export const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(128, "Password must be at most 128 characters")
+  .refine((p) => Buffer.byteLength(p, "utf8") <= 72, "Password is too long (max 72 bytes)");
+
+// Emails are case-insensitive in practice; normalizing prevents duplicate
+// accounts that differ only in case and makes login case-insensitive.
+const emailSchema = z.string().trim().toLowerCase().email().max(254);
+
+// Used to keep login timing the same whether or not the email exists
+// (otherwise "no such user" returns instantly and enumerates accounts).
+const DUMMY_PASSWORD_HASH = "$2a$12$3scIcCEZQlVzYAct0uk3rO91T.PmR0.f0kmK4zuWsOUwIpHqSLr56";
+
 const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  tenantName: z.string().min(1).max(200),
+  email: emailSchema,
+  password: passwordSchema,
+  tenantName: z.string().trim().min(1).max(200),
 });
 
 authRouter.post("/auth/register", authRateLimiter, asyncHandler(async (req, res) => {
@@ -99,14 +115,14 @@ authRouter.post("/auth/register", authRateLimiter, asyncHandler(async (req, res)
   const { rawToken } = await createSession(user.id, tenant.id);
   res.cookie(SESSION_COOKIE_NAME, rawToken, cookieOptions());
   res.status(201).json({
-    user: { id: user.id, email: user.email },
+    user: { id: user.id, email: user.email, displayName: user.displayName },
     tenant: { id: tenant.id, name: tenant.name, role: "OWNER" },
   });
 }));
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  email: emailSchema,
+  password: z.string().min(1).max(200),
 });
 
 authRouter.post("/auth/login", authRateLimiter, asyncHandler(async (req, res) => {
@@ -124,8 +140,9 @@ authRouter.post("/auth/login", authRateLimiter, asyncHandler(async (req, res) =>
   // Constant-shape response whether the user exists or not, so login can't
   // be used to enumerate registered emails via timing/response differences
   // beyond what bcrypt's own timing already reveals.
-  const passwordMatches = user ? await verifyPassword(password, user.passwordHash) : false;
+  const passwordMatches = await verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
   if (!user || !passwordMatches) {
+    logger.info({ event: "auth.login_failed" }, "failed login attempt");
     return res.status(401).json({ error: "invalid_credentials" });
   }
 
@@ -146,7 +163,7 @@ authRouter.post("/auth/login", authRateLimiter, asyncHandler(async (req, res) =>
 
   res.cookie(SESSION_COOKIE_NAME, rawToken, cookieOptions());
   res.json({
-    user: { id: user.id, email: user.email },
+    user: { id: user.id, email: user.email, displayName: user.displayName },
     tenants: user.memberships.map((m) => ({ id: m.tenant.id, name: m.tenant.name, role: m.role })),
     activeTenantId: firstMembership?.tenantId ?? null,
   });
@@ -157,7 +174,8 @@ authRouter.post("/auth/logout", requireAuth, asyncHandler(async (req, res) => {
   if (rawToken) {
     await revokeSession(rawToken);
   }
-  res.clearCookie(SESSION_COOKIE_NAME);
+  const { maxAge: _maxAge, ...clearOpts } = cookieOptions();
+  res.clearCookie(SESSION_COOKIE_NAME, clearOpts);
   res.status(204).send();
 }));
 
@@ -171,7 +189,7 @@ authRouter.get("/auth/me", requireAuth, asyncHandler(async (req, res) => {
   }
 
   res.json({
-    user: { id: user.id, email: user.email },
+    user: { id: user.id, email: user.email, displayName: user.displayName },
     tenants: user.memberships.map((m) => ({ id: m.tenant.id, name: m.tenant.name, role: m.role })),
     activeTenantId: req.authSession!.activeTenantId,
   });

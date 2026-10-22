@@ -1,5 +1,7 @@
 import type { NotificationType } from "@prisma/client";
 import { prisma } from "./db.js";
+import { dispatchNotificationToWebhooks } from "./webhooks.js";
+import { logger } from "./logger.js";
 
 /**
  * Creates a notification unless one of the same type+target was already
@@ -30,7 +32,7 @@ export async function notifyOnce(input: {
   });
   if (recent) return false;
 
-  await prisma.notification.create({
+  const created = await prisma.notification.create({
     data: {
       tenantId: input.tenantId,
       type: input.type,
@@ -38,5 +40,10 @@ export async function notifyOnce(input: {
       message: input.message,
     },
   });
+  // Fire-and-forget: a slow or broken webhook must never delay or fail the
+  // worker job that raised the alert.
+  void dispatchNotificationToWebhooks(created).catch((err) =>
+    logger.warn({ err }, "webhook dispatch failed"),
+  );
   return true;
 }

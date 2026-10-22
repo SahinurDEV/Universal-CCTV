@@ -15,6 +15,19 @@ apiAddress: :9997
 playback: yes
 playbackAddress: :9996
 
+# HLS is used for live view (proxied + auth-checked by apps/api).
+hls: yes
+hlsAddress: :8888
+hlsVariant: mpegts
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+
+# Not used by the platform — disabled to shrink the attack surface.
+rtmp: no
+srt: no
+webrtc: no
+moq: no
+
 # LOCAL DEV ONLY. MediaMTX's default admin user only grants unauthenticated
 # API/playback access from 127.0.0.1/::1 — which Docker's published ports do
 # not preserve (the request arrives from the Docker bridge gateway, not
@@ -24,9 +37,15 @@ playbackAddress: :9996
 # because this port isn't exposed beyond this dev machine. Before any
 # shared or production deployment, replace this with real credentials (or
 # network-level isolation) — see docs/security.md.
+#
+# Hardened: the anonymous user is now limited to loopback and private
+# (Docker bridge) source addresses instead of `ips: []` (= every address).
+# Browsers never talk to MediaMTX directly: live view is proxied through
+# apps/api (GET /cameras/:id/live/hls/*), which enforces the user's session
+# and tenant membership before forwarding to MediaMTX's HLS server.
 authInternalUsers:
   - user: any
-    ips: []
+    ips: ["127.0.0.1/32", "::1/128", "172.16.0.0/12"]
     permissions:
       - action: publish
       - action: read

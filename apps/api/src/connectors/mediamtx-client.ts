@@ -30,23 +30,92 @@ export async function addRecordingPath(
   rtspUrl: string,
   opts: { segmentDurationSeconds: number },
 ): Promise<void> {
+  const config = {
+    source: rtspUrl,
+    sourceOnDemand: false, // keep recording even with nobody viewing live
+    record: true,
+    recordPath: `${loadEnv().MEDIAMTX_RECORD_DIR.replace(/\/$/, "")}/%path/%Y-%m-%d_%H-%M-%S-%f_%z`,
+    recordFormat: "fmp4",
+    recordSegmentDuration: `${opts.segmentDurationSeconds}s`,
+  };
   const res = await fetch(apiUrl(`/v3/config/paths/add/${mediamtxPathName(cameraId)}`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      source: rtspUrl,
-      sourceOnDemand: false, // keep recording even with nobody viewing live
-      record: true,
-      recordPath: `/recordings/%path/%Y-%m-%d_%H-%M-%S-%f_%z`,
-      recordFormat: "fmp4",
-      recordSegmentDuration: `${opts.segmentDurationSeconds}s`,
-    }),
+    body: JSON.stringify(config),
   });
 
+  if (res.ok) return;
+  const body = await res.text().catch(() => "");
+  // The path may already exist because someone opened Live View (which adds
+  // an on-demand, non-recording path). Upgrade it in place instead.
+  if (res.status === 400 && body.includes("already exists")) {
+    const patch = await fetch(apiUrl(`/v3/config/paths/replace/${mediamtxPathName(cameraId)}`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+    if (patch.ok) return;
+    const patchBody = await patch.text().catch(() => "");
+    throw new MediaMtxError(`Failed to enable recording on path (${patch.status}): ${scrub(patchBody, rtspUrl)}`);
+  }
+  throw new MediaMtxError(`Failed to add recording path (${res.status}): ${scrub(body, rtspUrl)}`);
+}
+
+/**
+ * Makes sure a MediaMTX path exists for live viewing. If the camera is
+ * already being recorded the path exists and is reused as-is (live view and
+ * recording share one upstream RTSP connection). Otherwise an on-demand
+ * path is added: MediaMTX only connects to the camera while someone is
+ * actually watching.
+ */
+export async function ensureLivePath(cameraId: string, rtspUrl: string): Promise<void> {
+  const name = mediamtxPathName(cameraId);
+  const existing = await fetch(apiUrl(`/v3/config/paths/get/${name}`));
+  if (existing.ok) {
+    const cfg = (await existing.json().catch(() => ({}))) as { source?: string };
+    if (cfg.source === rtspUrl) return;
+    // Camera address/credential changed since the path was created.
+    const res = await fetch(apiUrl(`/v3/config/paths/patch/${name}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: rtspUrl }),
+    });
+    if (!res.ok) throw new MediaMtxError(`Failed to update live path (${res.status})`);
+    return;
+  }
+  if (existing.status !== 404) {
+    throw new MediaMtxError(`Failed to read live path (${existing.status})`);
+  }
+  const res = await fetch(apiUrl(`/v3/config/paths/add/${name}`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source: rtspUrl, sourceOnDemand: true, record: false }),
+  });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new MediaMtxError(`Failed to add recording path (${res.status}): ${scrub(body, rtspUrl)}`);
+    if (res.status === 400 && body.includes("already exists")) return; // raced with another viewer
+    throw new MediaMtxError(`Failed to add live path (${res.status}): ${scrub(body, rtspUrl)}`);
   }
+}
+
+/** Removes a live-only (non-recording) path, e.g. when a camera is deleted. */
+export async function removePathIfExists(cameraId: string): Promise<void> {
+  const res = await fetch(apiUrl(`/v3/config/paths/delete/${mediamtxPathName(cameraId)}`), { method: "DELETE" });
+  if (!res.ok && res.status !== 404 && res.status !== 400) {
+    throw new MediaMtxError(`Failed to remove path (${res.status})`);
+  }
+}
+
+/**
+ * Fetches one HLS resource (playlist or segment) for a camera from MediaMTX's
+ * HLS server. `file` must already be validated by the caller (see
+ * routes/live.ts) — only plain file names, never "../" or slashes.
+ */
+export async function fetchHlsResource(cameraId: string, file: string, search: string): Promise<Response> {
+  const base = loadEnv().MEDIAMTX_HLS_URL.replace(/\/$/, "");
+  return fetch(`${base}/${mediamtxPathName(cameraId)}/${file}${search}`, {
+    signal: AbortSignal.timeout(15000),
+  });
 }
 
 /**
@@ -120,7 +189,7 @@ export async function getPathStatus(cameraId: string): Promise<{ ready: boolean 
 export async function listAllPathStatuses(): Promise<Map<string, { ready: boolean }>> {
   const statuses = new Map<string, { ready: boolean }>();
   let page = 0;
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     const res = await fetch(apiUrl(`/v3/paths/list?page=${page}&itemsPerPage=100`));
     if (!res.ok) {

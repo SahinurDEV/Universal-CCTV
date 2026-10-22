@@ -1,0 +1,234 @@
+# Universal CCTV — User Manual
+
+This guide is for people who **use** the platform: shop owners, home users,
+security staff. No programming knowledge is needed.
+
+---
+
+## 1. What this app does
+
+- Shows your cameras **live** in your web browser, from anywhere.
+- **Records** your cameras to cloud storage.
+- Lets you **watch and download** old recordings.
+- **Alerts** you when a camera goes offline or storage is almost full.
+- Works with almost any IP camera brand (Hikvision, Dahua, Reolink, Axis,
+  TP-Link Tapo, Uniview, and any camera that supports RTSP or ONVIF).
+
+---
+
+## 2. Create your account
+
+1. Open the website and click **Create a workspace** (or **Create one** on the login page).
+2. Enter:
+   - **Workspace name** — your business or home name (for example "Rahman Store").
+   - **Email** and **Password** (at least 8 characters).
+3. Click **Create workspace**. You are now signed in as the **Owner**.
+
+To sign in later, click **Log in** and enter your email and password.
+
+**Roles** (who can do what):
+
+| Role | Can watch live & recordings | Add/edit cameras, record | Manage locations, integrations | Delete cameras, billing |
+|---|---|---|---|---|
+| Owner | ✅ | ✅ | ✅ | ✅ |
+| Admin | ✅ | ✅ | ✅ | ✅ (not cancel) |
+| Operator | ✅ | ✅ | assign cameras only | ❌ |
+| Viewer | ✅ | ❌ | ❌ | ❌ |
+
+---
+
+## 3. Add a location (optional but recommended)
+
+A location is a place, like "Home", "Shop" or "Warehouse". It helps you group
+cameras.
+
+1. Go to **Locations** → **Add location**.
+2. Type a **name**, an optional **address**, and pick your **time zone**.
+3. Click **Save**.
+
+You can later move cameras between locations in the **Assign cameras** table
+on the same page. Deleting a location never deletes its cameras.
+
+---
+
+## 4. Connect a camera
+
+### 4.1 What you need from your camera
+
+- The camera's **IP address** (for example `192.168.1.64`). Find it in the
+  camera's own app, your router's "connected devices" list, or use
+  **Scan network** on the Add camera form (works only when the server is on
+  the same network as the camera).
+- The camera's **username and password** (often `admin` + the password you
+  set when you first installed the camera).
+- **RTSP must be enabled** on the camera. On most brands it is on by default.
+  On Tapo and Reolink you may need to turn it on (see the table below).
+
+### 4.2 Add it
+
+1. Go to **Cameras** → **Add camera**.
+2. Fill in:
+   - **Name** — e.g. "Front door".
+   - **Location** — optional.
+   - **Connector type** — choose **RTSP** for most cameras, or **ONVIF** if
+     your camera supports ONVIF (this also detects PTZ/zoom/motion features).
+   - **Host** — the camera's IP address or internet address (no `rtsp://`,
+     no slashes).
+   - **Port** — usually **554**.
+   - **Username / Password** — the camera login.
+   - **Path** — the part after the port in the RTSP address (see the table).
+3. Click **Add camera**.
+4. Open the camera and click **Test Connection**. A green result with the
+   video size (for example 1920×1080) means it works.
+5. Click **Live View** to watch it.
+
+Your camera password is stored **encrypted** and is never shown again.
+
+### 4.3 RTSP addresses by brand
+
+The full address looks like `rtsp://USER:PASSWORD@IP:PORT/PATH`. In the form
+you enter the pieces separately. Use the **Path** column for the Path field.
+
+| Brand | Port | Path — main stream (best quality) | Path — sub stream (lower quality, less data) | Notes |
+|---|---|---|---|---|
+| **Hikvision** (and HiLook, Annke many models) | 554 | `/Streaming/Channels/101` | `/Streaming/Channels/102` | For NVR channel 2 use `201`/`202`, channel 3 `301`… |
+| **Dahua** (and Amcrest, Lorex many models) | 554 | `/cam/realmonitor?channel=1&subtype=0` | `/cam/realmonitor?channel=1&subtype=1` | Change `channel=` for NVR channels. |
+| **Reolink** | 554 | `/h264Preview_01_main` | `/h264Preview_01_sub` | 4K/H.265 models: `/h265Preview_01_main`. Enable RTSP in Reolink app → Settings → Network → Advanced → Port settings. |
+| **Axis** | 554 | `/axis-media/media.amp` | `/axis-media/media.amp?resolution=640x480` | |
+| **TP-Link Tapo** | 554 | `/stream1` | `/stream2` | In the Tapo app: Camera → Settings → Advanced → **Camera Account** — create a username/password. Use *that* account, not your TP-Link login. |
+| **Uniview (UNV)** | 554 | `/unicast/c1/s0/live` | `/unicast/c1/s1/live` | Older firmware: `/media/video1`. |
+| **Generic ONVIF camera** | 554 (RTSP), 80 or 8000 (ONVIF) | Choose **ONVIF**, set the ONVIF port, and use **Scan network**. If you know the RTSP path, enter it too. | | The camera's manual or the free "ONVIF Device Manager" tool shows the stream address. |
+| **Other brands** | usually 554 | Search "<brand> <model> RTSP URL" | | Try it first in VLC: *Media → Open Network Stream*. If VLC plays it, this app can too. |
+
+**Tip:** If VLC on your computer can play `rtsp://user:pass@IP:554/PATH`, the
+same values will work here.
+
+### 4.4 Same network vs. remote cameras
+
+**Same network (self-hosted):** if the server running this app is in the same
+building/network as the cameras, just use the camera's local IP
+(`192.168.x.x` or `10.x.x.x`).
+
+**Remote (cloud server, cameras at your home/shop):** the cloud server must be
+able to reach the camera over the internet. Options, best first:
+
+1. **VPN** (recommended): connect the camera network and the server with a VPN
+   such as WireGuard or Tailscale, then use the camera's VPN address.
+2. **Port forwarding:** on your router, forward an outside port (for example
+   **5541**) to the camera's IP and port **554**. Then use your public IP or a
+   free dynamic-DNS name (e.g. `myshop.ddns.net`) as **Host** and `5541` as
+   **Port**. Use a **strong camera password** — the camera is now reachable
+   from the internet. Forward one port per camera (5541, 5542, …).
+3. Some ISPs block incoming connections (CGNAT). If port forwarding does not
+   work, use a VPN.
+
+For security, servers may block private/local addresses for cameras when
+running as a shared cloud service. If you see "not allowed", use the public or
+VPN address.
+
+### 4.5 Troubleshooting
+
+| Problem | What to try |
+|---|---|
+| **Test Connection: timeout** | Wrong IP or port; camera off; router not forwarding the port; firewall. Ping the camera, check the port. |
+| **Test Connection: connection failed / 401** | Wrong username/password. For Tapo use the *Camera Account*. Some cameras lock after many wrong tries — wait 30 minutes. |
+| **"404" / stream not found** | Wrong **Path**. Check the brand table, try the sub stream path. |
+| **"Host is not allowed"** | You entered `localhost`, `127.0.0.1` or another blocked address. Use the camera's real IP. Do not type `rtsp://` in Host. |
+| **Live View keeps "Connecting…"** | The camera may use H.265 (HEVC), which many browsers cannot play. Set the camera's main or sub stream to **H.264** in the camera settings, or use the sub stream path. |
+| **Live View is a few seconds behind** | Normal — live video uses HLS, which adds 2–6 seconds of delay. |
+| **Picture freezes** | Weak upload speed at the camera site. Use the sub stream path. |
+
+---
+
+## 5. Live View
+
+1. Go to **Live View**.
+2. Pick a layout: **1**, **2×2**, **3×3** or **4×4**.
+3. Filter by **location** if you have many cameras. Use **Next/Previous** for
+   more pages.
+4. A red **LIVE** dot means the video is playing. Click a video for full screen.
+
+You can also watch a single camera on its own page (Cameras → click the
+camera). Cameras only connect while someone is watching (unless they are
+recording), which saves data.
+
+---
+
+## 6. Recording and playback
+
+**Start recording:** open the camera (Cameras → camera name) and click
+**Start Recording**. Video is saved in short pieces (segments) to cloud
+storage. Click **Stop Recording** to stop.
+
+**Watch recordings:**
+1. Go to **Recordings**.
+2. Choose the **camera** and a **date** (only days with recordings are shown).
+3. Click a bar on the timeline or **Play** on a segment. Use **Previous/Next**
+   to move through the day.
+4. Click **Download** to save a clip as an MP4 file.
+
+Playback links expire after a few minutes for security; just click Play again.
+
+---
+
+## 7. Alerts
+
+The **Alerts** page (with a number badge in the menu) shows problems such as:
+camera offline, recording stopped, storage almost full, upload failed.
+
+- Click **Mark read** or **Mark all as read**.
+- Choose which alert types you want to see in **Settings → Alert preferences**.
+- To get alerts in other apps (Slack, email via Zapier, etc.), add a
+  **webhook** under **Integrations** (see section 10).
+
+---
+
+## 8. Storage and retention (how long video is kept)
+
+- **Storage** shows how much space each camera uses.
+- Each camera has a **retention policy** — 7, 30 or 90 days. Older recordings
+  are deleted automatically. Change it on the camera's page.
+- Your plan limits the maximum retention and total storage. When storage is
+  full, new recordings cannot start until old ones expire or you upgrade.
+
+---
+
+## 9. Subscription
+
+Go to **Subscription** to see your plan, camera limit, storage used, and to
+change or cancel your plan. New workspaces start with a free trial. Only the
+Owner can cancel.
+
+---
+
+## 10. Integrations (webhooks)
+
+A webhook sends every new alert to another service as a web request.
+
+1. **Integrations → Add webhook**.
+2. Enter a name and the URL from your other service (Zapier "Catch Hook",
+   Make, n8n, or your own server). Choose which alert types to send, or leave
+   all unchecked for all alerts.
+3. Copy the **signing secret** shown once. Your server can use it to check the
+   request really came from us (header `X-CCTV-Signature`).
+4. Click **Send test** to check it works.
+
+---
+
+## 11. Settings
+
+- **Profile:** set your display name.
+- **Change password:** enter your current password and a new one. All your
+  *other* devices are signed out automatically.
+- **Alert preferences:** turn alert types on/off for yourself.
+- **Signed-in devices:** see where you're signed in and **Sign out all other
+  devices** if you lost a phone or used a shared computer.
+
+---
+
+## 12. Security tips
+
+- Change every camera's default password.
+- Prefer a VPN over port forwarding.
+- Give staff the **Viewer** role if they only need to watch.
+- Sign out on shared computers.

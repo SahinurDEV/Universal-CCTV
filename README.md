@@ -23,11 +23,22 @@ docs/deployment.md for running this anywhere but here.
 - 📘 **[User manual](docs/user-manual.md)** — sign up, add locations, connect
   cameras (RTSP paths for Hikvision, Dahua, Reolink, Axis, Tapo, Uniview,
   ONVIF), remote access, live view, recordings, alerts, settings.
+- 📱 **[Mobile app](docs/mobile-app.md)** — the Flutter Android/iOS app:
+  setup, running on a phone, release APK/IPA builds, Firebase push setup.
 - 🧪 **[Local testing guide](docs/local-testing.md)** — exact commands to run
   and test everything locally, with or without Docker, using a fake ffmpeg camera.
 - 🔒 [Security](docs/security.md) · [Testing](docs/testing.md) · [Deployment](docs/deployment.md)
 
 ## What's implemented so far
+
+- **Mobile app (Flutter, Android + iOS)** in `apps/mobile`: configurable
+  server URL, sign-in with a bearer token kept in the Keychain / Android
+  Keystore, workspace switcher, locations and cameras with recording status,
+  camera detail, live view and a multi-camera live grid through the existing
+  HLS proxy, recordings and playback, alerts with detection labels and
+  snapshots, motion and detection toggles, optional FCM push, dark mode and
+  tablet layouts. Backed by a new `POST /auth/mobile/login` bearer-token
+  mode and `/push/fcm/*` endpoints. See docs/mobile-app.md.
 
 - **People & vehicle detection**: when motion fires, a snapshot is taken and
   run through SSD MobileNet v1 (COCO, Apache-2.0) on CPU via
@@ -293,6 +304,7 @@ and production still targets real AWS S3.
 - [docs/retention-and-storage.md](docs/retention-and-storage.md) — retention policies, enforcement/reconciliation, storage accounting
 - [docs/subscriptions-and-billing.md](docs/subscriptions-and-billing.md) — plans, the dev billing adapter, quota enforcement
 - [docs/monitoring-and-alerts.md](docs/monitoring-and-alerts.md) — camera health checks, notification types, alert-storm prevention
+- [docs/mobile-app.md](docs/mobile-app.md) — Flutter mobile app, bearer auth, FCM push setup, building APK/IPA
 - [docs/testing.md](docs/testing.md) — unit vs. integration test split, coverage, known gaps
 - [docs/security.md](docs/security.md) — auth, tenant isolation, credential handling, SSRF guard, the two real findings from the Phase 9 review
 - [docs/failure-recovery.md](docs/failure-recovery.md) — two real bugs found by actually killing Postgres/Redis/MediaMTX against a running server, both fixed and reverified

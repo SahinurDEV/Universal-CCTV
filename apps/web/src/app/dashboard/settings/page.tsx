@@ -196,7 +196,7 @@ function SessionsCard() {
       <ul className="space-y-1 text-sm text-slate-400">
         {sessions.map((s) => (
           <li key={s.id}>
-            Signed in {new Date(s.createdAt).toLocaleString()} · last active {new Date(s.lastUsedAt).toLocaleString()}
+            {s.clientType === "mobile" ? `📱 ${s.deviceName || "Mobile app"} · ` : ""}Signed in {new Date(s.createdAt).toLocaleString()} · last active {new Date(s.lastUsedAt).toLocaleString()}
             {s.current && <span className="ml-2 text-emerald-400">(this device)</span>}
           </li>
         ))}

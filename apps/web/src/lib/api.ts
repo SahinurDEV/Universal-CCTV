@@ -430,7 +430,7 @@ export function changePassword(currentPassword: string, newPassword: string) {
 }
 
 export function listSessions() {
-  return apiFetch<{ sessions: { id: string; createdAt: string; lastUsedAt: string; expiresAt: string; current: boolean }[] }>(
+  return apiFetch<{ sessions: { id: string; createdAt: string; lastUsedAt: string; expiresAt: string; current: boolean; clientType?: string; deviceName?: string | null }[] }>(
     "/account/sessions",
   );
 }

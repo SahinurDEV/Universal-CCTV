@@ -7,6 +7,8 @@ import { asyncHandler } from "../middleware/async-handler.js";
 import { probeRateLimiter } from "../middleware/rateLimit.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { assertSafePushEndpoint, isPushConfigured, sendPush } from "../lib/push.js";
+import { isFcmConfigured } from "../lib/fcm.js";
+import { hasControlChars } from "../lib/validation.js";
 
 /**
  * Web Push device subscriptions — always the signed-in user's own devices.
@@ -95,4 +97,52 @@ pushRouter.post("/test", probeRateLimiter, asyncHandler(async (req, res) => {
     if (await sendPush(s, { title: "Universal CCTV", body: "Test notification — push is working.", url: "/dashboard/settings", tag: "test" })) sent++;
   }
   res.json({ devices: subs.length, sent });
+}));
+
+// ---------------------------------------------------------------- FCM (native app)
+
+const fcmSchema = z.object({
+  // FCM registration tokens are ~150-200 chars of [A-Za-z0-9_:-].
+  token: z.string().regex(/^[A-Za-z0-9_:-]{20,4096}$/),
+  platform: z.enum(["android", "ios"]),
+  deviceName: z.string().trim().max(100).refine((v) => !hasControlChars(v) && !/[<>]/.test(v), "invalid characters").optional(),
+});
+
+pushRouter.get("/fcm/config", asyncHandler(async (_req, res) => {
+  res.json({ enabled: await isFcmConfigured() });
+}));
+
+pushRouter.get("/fcm/tokens", asyncHandler(async (req, res) => {
+  const tokens = await prisma.fcmToken.findMany({ where: { userId: req.authUser!.id }, orderBy: { createdAt: "desc" } });
+  res.json({
+    enabled: await isFcmConfigured(),
+    // Never echo the token itself back.
+    devices: tokens.map((t) => ({ id: t.id, platform: t.platform, deviceName: t.deviceName, createdAt: t.createdAt, lastSuccessAt: t.lastSuccessAt, thisSession: t.sessionId === req.authSession!.id })),
+  });
+}));
+
+/** Register this app install. Only mobile (bearer) sessions may register, so
+ * logout of that session removes the token. */
+pushRouter.post("/fcm/tokens", probeRateLimiter, asyncHandler(async (req, res) => {
+  if (req.authSession?.clientType !== "mobile") return res.status(403).json({ error: "mobile_session_required" });
+  if (!(await isFcmConfigured())) return res.status(503).json({ error: "fcm_not_configured", message: "Push notifications for the mobile app are not set up on this server." });
+  const parsed = fcmSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_request", details: parsed.error.issues });
+  const userId = req.authUser!.id;
+  const count = await prisma.fcmToken.count({ where: { userId, NOT: { token: parsed.data.token } } });
+  if (count >= MAX_SUBSCRIPTIONS_PER_USER) return res.status(409).json({ error: "too_many_devices" });
+  const row = await prisma.fcmToken.upsert({
+    where: { token: parsed.data.token },
+    create: { userId, sessionId: req.authSession!.id, token: parsed.data.token, platform: parsed.data.platform, deviceName: parsed.data.deviceName ?? null },
+    update: { userId, sessionId: req.authSession!.id, platform: parsed.data.platform, deviceName: parsed.data.deviceName ?? null },
+  });
+  res.status(201).json({ id: row.id, platform: row.platform, deviceName: row.deviceName });
+}));
+
+pushRouter.delete("/fcm/tokens/:id", asyncHandler(async (req, res) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return res.status(404).json({ error: "not_found" });
+  const r = await prisma.fcmToken.deleteMany({ where: { id: id.data, userId: req.authUser!.id } });
+  if (r.count === 0) return res.status(404).json({ error: "not_found" });
+  res.status(204).send();
 }));

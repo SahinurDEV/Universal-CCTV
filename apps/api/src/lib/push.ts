@@ -5,6 +5,7 @@ import { loadEnv } from "../env.js";
 import { logger } from "./logger.js";
 import { mutedTypesFrom } from "./notification-prefs.js";
 import { assertSafeWebhookUrl } from "./webhooks.js";
+import { dispatchNotificationToFcm } from "./fcm.js";
 
 let configured: boolean | undefined;
 
@@ -83,8 +84,15 @@ export async function dispatchNotificationToPush(n: {
   type: NotificationType;
   message: string;
   targetId: string | null;
+  eventId?: string | null;
 }): Promise<number> {
-  if (!isPushConfigured()) return 0;
+  // Native apps (FCM) and browsers (Web Push) are independent; either may be
+  // configured without the other.
+  const fcmSent = await dispatchNotificationToFcm(n, PUSH_TITLES[n.type] ?? "Alert").catch((err) => {
+    logger.warn({ err }, "FCM dispatch failed");
+    return 0;
+  });
+  if (!isPushConfigured()) return fcmSent;
   const members = await prisma.membership.findMany({
     where: { tenantId: n.tenantId },
     select: { notificationPreferences: true, user: { select: { pushSubscriptions: true } } },
@@ -103,7 +111,7 @@ export async function dispatchNotificationToPush(n: {
       if (await sendPush(sub, payload)) sent++;
     }
   }
-  return sent;
+  return sent + fcmSent;
 }
 
 export function resetPushConfigForTests() {

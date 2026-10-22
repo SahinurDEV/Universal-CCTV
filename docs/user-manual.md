@@ -238,6 +238,10 @@ or in the dark.
 
 ## 7C. Push notifications on your phone
 
+*Using the mobile app?* Open **Settings → Push notifications → Enable** in
+the app instead (needs Firebase set up by your administrator, see
+[mobile-app.md](mobile-app.md)). The steps below are for the web dashboard.
+
 1. Open the dashboard on your phone (on iPhone, first use Share → **Add to
    Home Screen** and open it from the home screen; iOS 16.4 or later).
 2. Go to **Settings → Phone & browser notifications** and tap **Turn on for
@@ -344,7 +348,33 @@ Open **Team** in the menu.
 
 ## 10B. Using it on a phone
 
-The dashboard works in a phone browser. Tap **☰ Menu** at the top left to
+**Mobile app (Android and iOS).** Install the Universal CCTV app (your
+administrator gives you the APK or a TestFlight / store link; see
+[mobile-app.md](mobile-app.md)).
+
+1. Enter your server address, e.g. `https://cctv.example.com/api`, and tap
+   **Continue**. The app warns you if the address is plain `http://` over
+   the internet.
+2. Sign in with the same email and password as the dashboard.
+3. Use the tabs at the bottom (on a tablet, on the left):
+   - **Cameras**: cameras grouped by location with a **Recording / Idle**
+     badge. Tap one for live view, status (**Test connection**),
+     **Recordings**, and the **Motion & detection** switches (operators and
+     admins only).
+   - **Live**: a grid of live cameras. Pick 1, 4, 9 or 16 streams with the
+     grid button.
+   - **Alerts**: newest first, with person/vehicle labels and snapshots.
+     Tap a detection to see the snapshot; **✓✓** marks everything read.
+   - **Settings**: switch workspace, light/dark theme, **Enable** push
+     notifications, **Sign out**.
+4. The building icon at the top switches workspace.
+
+Signing out ends the session on the server and stops push alerts to that
+phone. You can also see the phone under **Settings → Signed-in devices** on
+the dashboard (marked 📱); **Sign out other devices** there signs the phone
+out too.
+
+**Phone browser.** The dashboard also works in a phone browser. Tap **☰ Menu** at the top left to
 open the menu. Live View shows one camera per row on a phone; pick **4×4**
 for a compact 2-column grid. Wide tables scroll sideways.
 

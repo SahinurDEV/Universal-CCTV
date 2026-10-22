@@ -263,3 +263,34 @@ all other sessions.
   plan's max retention, audit-logged. Deletion is storage first, then
   database (a failed object delete is retried, never orphaned).
 - Two-step login / 2FA is intentionally not part of this release.
+
+## Mobile app auth and FCM (feature/mobile-app)
+
+- **Bearer-token mode for the app.** `POST /auth/mobile/login` uses the same
+  password check, rate limiter (20 / 15 min per IP), dummy-hash timing
+  protection and audit logging as the web login, but returns the opaque
+  session token in the body (`Cache-Control: no-store`) instead of setting a
+  cookie. Only its SHA-256 hash is stored, in the same `Session` table, so
+  logout, expiry and "sign out other sessions" work the same way.
+- **Channel binding.** Each session has `clientType` (`web` / `mobile`).
+  A mobile token is accepted only as `Authorization: Bearer <64 hex>`, and a
+  web token only from the `cctv_session` cookie, so a stolen cookie can't be
+  replayed as a bearer token and vice versa. A malformed `Authorization`
+  header is a 401; it never falls back to the cookie.
+- **No CSRF exposure.** Bearer requests carry no ambient credentials, so the
+  CSRF/origin checks that protect cookie sessions are not needed for them;
+  the web cookie flow is unchanged.
+- **Token storage on the phone.** The app keeps the token only in
+  `flutter_secure_storage` (iOS Keychain / Android Keystore-backed
+  encrypted prefs). Logout calls `/auth/logout` and wipes it; a 401 wipes it.
+  The app warns before using a plain-http server on a public host.
+- **FCM tokens** are tied to the mobile session that registered them
+  (`fcm_tokens.session_id`, cascade delete). Logout or session revocation
+  deletes them, and dispatch only sends to tokens whose session is still
+  valid. Registration requires a mobile session, is rate-limited, validates
+  the token format, and caps devices per user (20). Dead tokens are pruned
+  on FCM's not-registered / invalid-token errors. FCM is off unless a
+  service-account key is configured; the key is read from env/file and never
+  logged.
+- **Not done:** certificate pinning in the app; push payloads contain only
+  ids and the alert text (no snapshot URL).

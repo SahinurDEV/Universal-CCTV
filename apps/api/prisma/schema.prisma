@@ -52,6 +52,7 @@ model User {
   sessions     Session[]
   invitesSent  Invite[]
   pushSubscriptions PushSubscription[]
+  fcmTokens    FcmToken[]
 
   @@map("users")
 }
@@ -75,8 +76,12 @@ model Session {
   lastUsedAt      DateTime  @default(now()) @map("last_used_at")
   expiresAt       DateTime  @map("expires_at")
   revokedAt       DateTime? @map("revoked_at")
+  /// "web" (httpOnly cookie) or "mobile" (Authorization: Bearer).
+  clientType      String    @default("web") @map("client_type")
+  deviceName      String?   @map("device_name")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fcmTokens FcmToken[]
 
   @@index([userId])
   @@map("sessions")
@@ -562,4 +567,24 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+/// Firebase Cloud Messaging registration token of one native app install.
+/// Tied to the mobile session that registered it, so logging out (or
+/// revoking that session) stops pushes to the device.
+model FcmToken {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  sessionId  String?  @map("session_id")
+  token      String   @unique
+  platform   String
+  deviceName String?  @map("device_name")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSuccessAt DateTime? @map("last_success_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("fcm_tokens")
 }

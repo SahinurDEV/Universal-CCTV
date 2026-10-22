@@ -2,13 +2,14 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
-import { createSession, revokeSession, setActiveTenant, SESSION_COOKIE_NAME } from "../lib/sessions.js";
+import { createSession, setActiveTenant, SESSION_COOKIE_NAME } from "../lib/sessions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { requireAuth } from "../middleware/auth.js";
 import { authRateLimiter } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { loadEnv } from "../env.js";
 import { logger } from "../lib/logger.js";
+import { hasControlChars } from "../lib/validation.js";
 
 export const authRouter = Router();
 
@@ -169,11 +170,70 @@ authRouter.post("/auth/login", authRateLimiter, asyncHandler(async (req, res) =>
   });
 }));
 
-authRouter.post("/auth/logout", requireAuth, asyncHandler(async (req, res) => {
-  const rawToken = req.cookies?.[SESSION_COOKIE_NAME];
-  if (rawToken) {
-    await revokeSession(rawToken);
+const mobileLoginSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(1).max(200),
+  deviceName: z
+    .string()
+    .trim()
+    .max(100)
+    .refine((v) => !hasControlChars(v) && !/[<>]/.test(v), "invalid characters")
+    .optional(),
+});
+
+/**
+ * Native-app login. Same credential checks, rate limit and enumeration
+ * resistance as /auth/login, but returns an opaque bearer token in the body
+ * instead of setting a cookie (apps send `Authorization: Bearer <token>`).
+ * The token is shown once; only its hash is stored. Revocable like any
+ * session (logout, password change, "sign out other devices").
+ */
+authRouter.post("/auth/mobile/login", authRateLimiter, asyncHandler(async (req, res) => {
+  const parsed = mobileLoginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_request", details: parsed.error.issues });
   }
+  const { email, password, deviceName } = parsed.data;
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { memberships: { include: { tenant: true } } },
+  });
+  const passwordMatches = await verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordMatches) {
+    logger.info({ event: "auth.login_failed", client: "mobile" }, "failed login attempt");
+    return res.status(401).json({ error: "invalid_credentials" });
+  }
+  const firstMembership = user.memberships[0];
+  const { rawToken, session } = await createSession(user.id, firstMembership?.tenantId ?? null, {
+    clientType: "mobile",
+    deviceName: deviceName || null,
+  });
+  if (firstMembership) {
+    await writeAuditLog({
+      tenantId: firstMembership.tenantId,
+      actorUserId: user.id,
+      action: "user.login",
+      targetType: "User",
+      targetId: user.id,
+      metadata: { client: "mobile" },
+    });
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    token: rawToken,
+    tokenType: "Bearer",
+    expiresAt: session.expiresAt,
+    user: { id: user.id, email: user.email, displayName: user.displayName },
+    tenants: user.memberships.map((m) => ({ id: m.tenant.id, name: m.tenant.name, role: m.role })),
+    activeTenantId: firstMembership?.tenantId ?? null,
+  });
+}));
+
+authRouter.post("/auth/logout", requireAuth, asyncHandler(async (req, res) => {
+  // Revoke exactly the session that authenticated this request (cookie or
+  // bearer), and stop native pushes registered by it.
+  await prisma.session.update({ where: { id: req.authSession!.id }, data: { revokedAt: new Date() } });
+  await prisma.fcmToken.deleteMany({ where: { sessionId: req.authSession!.id } });
   const { maxAge: _maxAge, ...clearOpts } = cookieOptions();
   res.clearCookie(SESSION_COOKIE_NAME, clearOpts);
   res.status(204).send();

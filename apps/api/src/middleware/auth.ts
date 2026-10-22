@@ -4,19 +4,37 @@ import { findValidSession, SESSION_COOKIE_NAME } from "../lib/sessions.js";
 import { prisma } from "../lib/db.js";
 import { asyncHandler } from "./async-handler.js";
 
+const BEARER_RE = /^Bearer ([0-9a-f]{64})$/;
+
+/** Where the session token came from. Mobile apps send
+ * `Authorization: Bearer <token>` (no cookies → not CSRF-able); browsers use
+ * the httpOnly cookie. A token is only accepted through the channel its
+ * session was issued for, so a web cookie can't be replayed as a bearer
+ * token or vice versa. A malformed Authorization header is rejected rather
+ * than silently falling back to the cookie. */
+export function extractSessionToken(req: Request): { token: string; channel: "web" | "mobile" } | null | "invalid" {
+  const header = req.headers.authorization;
+  if (header !== undefined) {
+    const m = BEARER_RE.exec(header);
+    return m ? { token: m[1]!, channel: "mobile" } : "invalid";
+  }
+  const cookie = req.cookies?.[SESSION_COOKIE_NAME];
+  return typeof cookie === "string" && cookie ? { token: cookie, channel: "web" } : null;
+}
+
 export const requireAuth = asyncHandler(async (req, res, next) => {
-  const rawToken = req.cookies?.[SESSION_COOKIE_NAME];
-  if (!rawToken) {
+  const extracted = extractSessionToken(req);
+  if (!extracted || extracted === "invalid") {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  const session = await findValidSession(rawToken);
-  if (!session) {
+  const session = await findValidSession(extracted.token);
+  if (!session || session.clientType !== extracted.channel) {
     return res.status(401).json({ error: "unauthorized" });
   }
 
   req.authUser = { id: session.user.id, email: session.user.email };
-  req.authSession = { id: session.id, activeTenantId: session.activeTenantId };
+  req.authSession = { id: session.id, activeTenantId: session.activeTenantId, clientType: extracted.channel };
   next();
 });
 

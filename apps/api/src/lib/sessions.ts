@@ -12,7 +12,11 @@ function hashToken(token: string): string {
  * Creates a session and returns the RAW token (to set in the cookie). Only
  * the hash is persisted — the raw token is never stored or logged anywhere.
  */
-export async function createSession(userId: string, activeTenantId: string | null) {
+export async function createSession(
+  userId: string,
+  activeTenantId: string | null,
+  opts: { clientType?: "web" | "mobile"; deviceName?: string | null } = {},
+) {
   const env = loadEnv();
   const rawToken = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + env.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -23,6 +27,8 @@ export async function createSession(userId: string, activeTenantId: string | nul
       activeTenantId,
       tokenHash: hashToken(rawToken),
       expiresAt,
+      clientType: opts.clientType ?? "web",
+      deviceName: opts.deviceName ?? null,
     },
   });
 

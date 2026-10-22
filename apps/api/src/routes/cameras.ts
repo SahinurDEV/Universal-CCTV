@@ -74,6 +74,8 @@ function serializeCamera(camera: {
   createdAt: Date;
   updatedAt: Date;
   credential: unknown;
+  motionEnabled?: boolean;
+  motionSensitivity?: number;
   capability: Parameters<typeof toCapabilityResponse>[0];
 }) {
   return {
@@ -90,6 +92,8 @@ function serializeCamera(camera: {
     createdAt: camera.createdAt,
     updatedAt: camera.updatedAt,
     hasCredential: camera.credential != null,
+    motionEnabled: camera.motionEnabled ?? false,
+    motionSensitivity: camera.motionSensitivity ?? 50,
     capability: toCapabilityResponse(camera.capability),
     // POST /cameras/:id/test-connection actually probes the RTSP stream for
     // every connector type. What it CANNOT yet confirm: ONVIF-specific

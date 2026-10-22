@@ -14,7 +14,7 @@ export const authRouter = Router();
 
 const TRIAL_PERIOD_DAYS = 14;
 
-function cookieOptions() {
+export function cookieOptions() {
   const env = loadEnv();
   return {
     httpOnly: true,
@@ -34,7 +34,7 @@ export const passwordSchema = z
 
 // Emails are case-insensitive in practice; normalizing prevents duplicate
 // accounts that differ only in case and makes login case-insensitive.
-const emailSchema = z.string().trim().toLowerCase().email().max(254);
+export const emailSchema = z.string().trim().toLowerCase().email().max(254);
 
 // Used to keep login timing the same whether or not the email exists
 // (otherwise "no such user" returns instantly and enumerates accounts).

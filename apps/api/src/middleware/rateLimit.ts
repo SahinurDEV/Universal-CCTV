@@ -50,3 +50,22 @@ export const liveStreamRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "too_many_requests" },
 });
+
+/** Creating invites (each may send an email) — per IP. */
+export const inviteCreateRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests" },
+});
+
+/** Public invite-token lookups/accepts: slows down token guessing (tokens
+ * are 256-bit random, so this is defense in depth). */
+export const inviteTokenRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests" },
+});

@@ -101,6 +101,38 @@ const envSchema = z.object({
   // who created the invite (and logged in development only).
   SMTP_URL: z.string().optional(),
   MAIL_FROM: z.string().default("Universal CCTV <no-reply@localhost>"),
+
+  // --- Object detection (people / vehicles) ---
+  // SSD MobileNet v1 (COCO, Apache-2.0, ONNX model zoo), run on CPU with
+  // onnxruntime-node. Downloaded by `pnpm --filter @cctv/api model:download`
+  // or automatically on first use; never committed to git.
+  DETECTION_ENABLED: z
+    .enum(["true", "false", "1", "0"])
+    .default("true")
+    .transform((v) => v === "true" || v === "1"),
+  DETECTION_MODEL_PATH: z.string().default("models/ssd_mobilenet_v1_12.onnx"),
+  DETECTION_MODEL_URL: z
+    .string()
+    .url()
+    .default(
+      "https://github.com/onnx/models/raw/main/validated/vision/object_detection_segmentation/ssd-mobilenetv1/model/ssd_mobilenet_v1_12.onnx",
+    ),
+  // Download is rejected unless the file matches this hash. Empty = skip check.
+  DETECTION_MODEL_SHA256: z
+    .string()
+    .default("b8fba5e404077d4048d27fcd1667e85e27e192eb9bf51e696c46a3acd7d21058"),
+  DETECTION_AUTO_DOWNLOAD: z
+    .enum(["true", "false", "1", "0"])
+    .default("true")
+    .transform((v) => v === "true" || v === "1"),
+  DETECTION_MIN_SCORE: z.coerce.number().min(0.05).max(0.99).default(0.5),
+
+  // --- Web Push (VAPID) ---
+  // Generate with: pnpm --filter @cctv/api exec web-push generate-vapid-keys
+  // All three unset = push disabled (the rest of the app works normally).
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default("mailto:admin@localhost"),
 });
 
 export type Env = z.infer<typeof envSchema>;

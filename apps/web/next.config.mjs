@@ -20,7 +20,7 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  `img-src 'self' data: blob: https: ${extraMedia}${localSrc}`, // signed snapshot URLs
   `connect-src 'self' ${apiOrigin} https: ${extraMedia}${localSrc}${isDev ? " ws://localhost:*" : ""}`,
   `media-src 'self' blob: ${apiOrigin} https: ${extraMedia}${localSrc}`,
   "worker-src 'self' blob:",

@@ -7,6 +7,8 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   "UPLOAD_FAILURE",
   "RETENTION_CLEANUP_FAILURE",
   "MOTION_DETECTED",
+  "PERSON_DETECTED",
+  "VEHICLE_DETECTED",
 ];
 
 export function mutedTypesFrom(prefs: unknown): NotificationType[] {

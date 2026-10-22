@@ -47,6 +47,21 @@ export async function uploadRecordingSegment(objectKey: string, body: Buffer): P
   );
 }
 
+/** Generic small-object upload (e.g. motion snapshots). */
+export async function uploadObject(objectKey: string, body: Buffer, contentType: string): Promise<void> {
+  const env = loadEnv();
+  await getClient().send(
+    new PutObjectCommand({ Bucket: env.STORAGE_BUCKET, Key: objectKey, Body: body, ContentType: contentType }),
+  );
+}
+
+/** Snapshots live OUTSIDE the `tenants/` prefix on purpose: orphan
+ * reconciliation only scans `tenants/` and must never treat a snapshot as an
+ * orphaned recording. Their lifecycle is owned by MotionEvent retention. */
+export function buildSnapshotObjectKey(tenantId: string, cameraId: string, eventId: string): string {
+  return `snapshots/tenants/${tenantId}/cameras/${cameraId}/${eventId}.jpg`;
+}
+
 /**
  * Short-lived signed GET URL for a recording segment — never make a
  * recording's object public; this is the only sanctioned way a browser gets

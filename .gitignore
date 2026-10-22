@@ -16,3 +16,4 @@ tmp/
 .local-run/
 auto.crt
 auto.key
+apps/api/models/

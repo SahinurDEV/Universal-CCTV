@@ -282,7 +282,10 @@ export interface Notification {
     | "STORAGE_QUOTA_WARNING"
     | "UPLOAD_FAILURE"
     | "RETENTION_CLEANUP_FAILURE"
-    | "MOTION_DETECTED";
+    | "MOTION_DETECTED"
+    | "PERSON_DETECTED"
+    | "VEHICLE_DETECTED";
+  eventId?: string | null;
   targetId: string | null;
   message: string;
   readAt: string | null;
@@ -456,9 +459,12 @@ export interface MotionSettings {
   enabled: boolean;
   sensitivity: number;
   threshold: number;
+  alertClasses: AlertClass[];
   lastCheckedAt: string | null;
   lastError: string | null;
 }
+
+export type AlertClass = "any" | "person" | "vehicle";
 
 export interface MotionEvent {
   id: string;
@@ -467,13 +473,19 @@ export interface MotionEvent {
   score: number;
   threshold: number;
   detectedAt: string;
+  labels: { label: string; category: string; score: number }[] | null;
+  hasSnapshot: boolean;
 }
 
 export function getMotionSettings(cameraId: string) {
   return apiFetch<MotionSettings>(`/cameras/${cameraId}/motion`);
 }
 
-export function setMotionSettings(cameraId: string, input: { enabled: boolean; sensitivity?: number }) {
+export function getSnapshotUrl(eventId: string) {
+  return apiFetch<{ url: string; expiresInSeconds: number }>(`/motion-events/${eventId}/snapshot`);
+}
+
+export function setMotionSettings(cameraId: string, input: { enabled: boolean; sensitivity?: number; alertClasses?: AlertClass[] }) {
   return apiFetch<MotionSettings>(`/cameras/${cameraId}/motion`, { method: "PUT", body: JSON.stringify(input) });
 }
 
@@ -559,4 +571,70 @@ export function errorMessage(err: unknown, fallback: string): string {
     return body?.message ?? body?.details?.[0]?.message ?? body?.error ?? fallback;
   }
   return fallback;
+}
+
+// --- Web Push ---------------------------------------------------------------
+
+export interface PushDevice {
+  id: string;
+  service: string;
+  userAgent: string | null;
+  createdAt: string;
+  lastSuccessAt: string | null;
+}
+
+export function getPushConfig() {
+  return apiFetch<{ enabled: boolean; publicKey: string | null }>("/push/config");
+}
+
+export function listPushDevices() {
+  return apiFetch<{ enabled: boolean; subscriptions: PushDevice[] }>("/push/subscriptions");
+}
+
+export function savePushSubscription(sub: PushSubscriptionJSON, userAgent: string) {
+  return apiFetch<PushDevice>("/push/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.keys, userAgent: userAgent.slice(0, 300) }),
+  });
+}
+
+export function removePushDevice(id: string) {
+  return apiFetch<void>(`/push/subscriptions/${id}`, { method: "DELETE" });
+}
+
+export function sendTestPush() {
+  return apiFetch<{ devices: number; sent: number }>("/push/test", { method: "POST" });
+}
+
+// --- Retention ----------------------------------------------------------------
+
+export interface RetentionInfo {
+  workspaceRetentionDays: number | null;
+  planMaxRetentionDays: number | null;
+  totalBytes: string;
+  canEdit: boolean;
+  cameras: {
+    cameraId: string;
+    cameraName: string;
+    overrideDays: number | null;
+    effectiveDays: number | null;
+    bytes: string;
+    segmentCount: number;
+    oldestRecordingAt: string | null;
+  }[];
+}
+
+export function getRetention() {
+  return apiFetch<RetentionInfo>("/retention");
+}
+
+export function setWorkspaceRetention(retentionDays: number | null) {
+  return apiFetch<{ workspaceRetentionDays: number | null }>("/retention", { method: "PUT", body: JSON.stringify({ retentionDays }) });
+}
+
+export function setCameraRetention(cameraId: string, retentionDays: number | null) {
+  return apiFetch<{ cameraId: string; overrideDays: number | null }>(`/retention/cameras/${cameraId}`, {
+    method: "PUT",
+    body: JSON.stringify({ retentionDays }),
+  });
 }

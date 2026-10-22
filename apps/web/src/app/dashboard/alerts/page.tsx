@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { SnapshotThumb } from "@/components/SnapshotThumb";
 import {
   listMotionEvents,
   listNotifications,
@@ -18,6 +19,8 @@ const TYPE_LABELS: Record<Notification["type"], string> = {
   UPLOAD_FAILURE: "Upload failure",
   RETENTION_CLEANUP_FAILURE: "Retention cleanup failure",
   MOTION_DETECTED: "Motion detected",
+  PERSON_DETECTED: "Person detected",
+  VEHICLE_DETECTED: "Vehicle detected",
 };
 
 export default function AlertsPage() {
@@ -82,8 +85,9 @@ export default function AlertsPage() {
                 n.readAt ? "border-slate-800 text-slate-400" : "border-amber-800 bg-amber-950/20"
               }`}
             >
-              <div>
-                <p className={n.readAt ? "" : "font-medium text-amber-300"}>{TYPE_LABELS[n.type]}</p>
+              {n.eventId && <SnapshotThumb eventId={n.eventId} />}
+              <div className="min-w-0 flex-1">
+                <p className={n.readAt ? "" : "font-medium text-amber-300"}>{TYPE_LABELS[n.type] ?? n.type}</p>
                 <p className="mt-1">{n.message}</p>
                 <p className="mt-1 text-xs text-slate-500">{new Date(n.createdAt).toLocaleString()}</p>
               </div>

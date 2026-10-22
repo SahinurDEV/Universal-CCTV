@@ -16,7 +16,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "model:download": "tsx scripts/download-model.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -36,9 +37,11 @@
     "helmet": "^7.1.0",
     "ioredis": "^5.4.1",
     "nodemailer": "^10.2.0",
+    "onnxruntime-node": "^1.30.0",
     "onvif": "^0.8.3",
     "pino": "^9.4.0",
     "pino-http": "^10.3.0",
+    "web-push": "^3.6.7",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -50,6 +53,7 @@
     "@types/node": "^22.7.5",
     "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^6.0.2",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9.39.5",
     "globals": "^17.13.0",
     "prisma": "^5.20.0",

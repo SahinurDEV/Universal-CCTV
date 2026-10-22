@@ -14,6 +14,8 @@ export const WEBHOOK_EVENT_TYPES = [
   "UPLOAD_FAILURE",
   "RETENTION_CLEANUP_FAILURE",
   "MOTION_DETECTED",
+  "PERSON_DETECTED",
+  "VEHICLE_DETECTED",
 ] as const;
 
 export function generateWebhookSecret(): string {

@@ -14,6 +14,9 @@ datasource db {
 model Tenant {
   id        String   @id @default(uuid())
   name      String
+  /// Workspace-wide recording retention in days. Null = fall back to the
+  /// retention policy captured on each segment at ingest time.
+  retentionDays Int? @map("retention_days")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -48,6 +51,7 @@ model User {
   auditLogs    AuditLog[]
   sessions     Session[]
   invitesSent  Invite[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -162,6 +166,10 @@ model Camera {
   motionLastCheckedAt DateTime? @map("motion_last_checked_at")
   motionLastError   String?  @map("motion_last_error")
   motionEvents      MotionEvent[]
+  /// Which detections raise an alert: "any" (all motion), "person", "vehicle".
+  motionAlertClasses String[] @default(["any"]) @map("motion_alert_classes")
+  /// Per-camera retention override in days (null = workspace setting).
+  retentionDaysOverride Int? @map("retention_days_override")
 
   @@index([tenantId])
   @@index([locationId])
@@ -395,6 +403,8 @@ enum NotificationType {
   UPLOAD_FAILURE
   RETENTION_CLEANUP_FAILURE
   MOTION_DETECTED
+  PERSON_DETECTED
+  VEHICLE_DETECTED
 }
 
 model Notification {
@@ -407,6 +417,8 @@ model Notification {
   /// fresh row every poll. Nullable because not every notification type is
   /// tied to a single target (e.g. a tenant-wide storage warning).
   targetId  String?          @map("target_id")
+  /// Linked MotionEvent (for snapshot thumbnails) on detection alerts.
+  eventId   String?          @map("event_id")
   message   String
   readAt    DateTime?        @map("read_at")
   createdAt DateTime         @default(now()) @map("created_at")
@@ -497,6 +509,11 @@ model MotionEvent {
   score     Float
   /// Threshold that was in effect (derived from the camera's sensitivity).
   threshold Float
+  /// Object detections on the snapshot frame: [{ label, score }]. Null when
+  /// the detector was unavailable (plain motion alert).
+  labels      Json?
+  /// Object-storage key of the JPEG snapshot (snapshots/ prefix).
+  snapshotKey String?  @map("snapshot_key")
   detectedAt DateTime @default(now()) @map("detected_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -527,4 +544,22 @@ model Invite {
   @@index([tenantId, createdAt])
   @@index([email])
   @@map("invites")
+}
+
+/// One browser/device subscribed to Web Push for a user. Keys are the
+/// browser-generated public encryption keys (not secrets of ours).
+model PushSubscription {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSuccessAt DateTime? @map("last_success_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

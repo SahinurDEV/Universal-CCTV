@@ -25,6 +25,8 @@ export default function LoginPage() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError("Incorrect email or password.");
+      } else if (err instanceof ApiError && err.message === "account_suspended") {
+        setError("This account has been suspended. Contact support.");
       } else {
         setError("Could not reach the server. Is the API running?");
       }

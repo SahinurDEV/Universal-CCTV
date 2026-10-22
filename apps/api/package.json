@@ -17,7 +17,10 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "model:download": "tsx scripts/download-model.ts"
+    "model:download": "tsx scripts/download-model.ts",
+    "admin:grant": "tsx scripts/platform-admin.ts grant",
+    "admin:revoke": "tsx scripts/platform-admin.ts revoke",
+    "admin:list": "tsx scripts/platform-admin.ts list"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

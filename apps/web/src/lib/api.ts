@@ -35,10 +35,11 @@ export interface TenantMembership {
   id: string;
   name: string;
   role: "OWNER" | "ADMIN" | "OPERATOR" | "VIEWER";
+  suspended?: boolean;
 }
 
 export interface SessionInfo {
-  user: { id: string; email: string };
+  user: { id: string; email: string; isPlatformAdmin?: boolean };
   tenants: TenantMembership[];
   activeTenantId: string | null;
 }
@@ -636,5 +637,52 @@ export function setCameraRetention(cameraId: string, retentionDays: number | nul
   return apiFetch<{ cameraId: string; overrideDays: number | null }>(`/retention/cameras/${cameraId}`, {
     method: "PUT",
     body: JSON.stringify({ retentionDays }),
+  });
+}
+
+// --- Platform admin ----------------------------------------------------------
+
+export interface AdminStats {
+  tenants: { total: number; suspended: number };
+  users: { total: number; suspended: number };
+  cameras: { total: number; recording: number };
+  storage: { bytes: number };
+  recordings: { segments: number };
+  alerts: { total: number; last24h: number };
+  sessions: { active: number; mobile: number };
+}
+export interface AdminTenant {
+  id: string; name: string; createdAt: string; suspendedAt: string | null; suspendedReason: string | null;
+  members: number; cameras: number; alerts: number; storageBytes: number; segments: number;
+}
+export interface AdminUser {
+  id: string; email: string; displayName: string | null; createdAt: string; suspendedAt: string | null;
+  suspendedReason: string | null; isPlatformAdmin: boolean; activeSessions: number;
+  workspaces: { id: string; name: string; role: string }[];
+}
+export interface AdminCamera {
+  id: string; name: string; connectorType: string; manufacturer: string | null; model: string | null;
+  motionEnabled: boolean; createdAt: string; recording: boolean; motionEvents: number;
+  tenant: { id: string; name: string; suspendedAt: string | null };
+}
+export interface AdminAuditEntry {
+  id: string; action: string; targetType: string; targetId: string; metadata: Record<string, unknown> | null;
+  actorEmail: string | null; createdAt: string;
+}
+type Page<K extends string, T> = { total: number; page: number; pageSize: number } & Record<K, T[]>;
+function adminQuery(q?: string, page = 1) {
+  const p = new URLSearchParams({ page: String(page) });
+  if (q) p.set("q", q);
+  return p.toString();
+}
+export const adminStats = () => apiFetch<AdminStats>("/platform-admin/stats");
+export const adminTenants = (q?: string, page?: number) => apiFetch<Page<"tenants", AdminTenant>>(`/platform-admin/tenants?${adminQuery(q, page)}`);
+export const adminUsers = (q?: string, page?: number) => apiFetch<Page<"users", AdminUser>>(`/platform-admin/users?${adminQuery(q, page)}`);
+export const adminCameras = (q?: string, page?: number) => apiFetch<Page<"cameras", AdminCamera>>(`/platform-admin/cameras?${adminQuery(q, page)}`);
+export const adminAudit = (page?: number) => apiFetch<{ entries: AdminAuditEntry[] }>(`/platform-admin/audit?${adminQuery(undefined, page)}`);
+export function adminSetSuspended(kind: "tenants" | "users", id: string, suspend: boolean, reason?: string) {
+  return apiFetch<unknown>(`/platform-admin/${kind}/${id}/${suspend ? "suspend" : "unsuspend"}`, {
+    method: "POST",
+    body: JSON.stringify(suspend ? { reason } : {}),
   });
 }

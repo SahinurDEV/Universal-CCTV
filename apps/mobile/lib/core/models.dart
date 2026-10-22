@@ -14,13 +14,18 @@ class User {
 }
 
 class Tenant {
-  const Tenant({required this.id, required this.name, required this.role});
+  const Tenant({required this.id, required this.name, required this.role, this.suspended = false});
   final String id;
   final String name;
   final String role;
+  final bool suspended;
 
-  factory Tenant.fromJson(Map<String, dynamic> j) =>
-      Tenant(id: j['id'] as String, name: j['name'] as String, role: (j['role'] as String?) ?? 'VIEWER');
+  factory Tenant.fromJson(Map<String, dynamic> j) => Tenant(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        role: (j['role'] as String?) ?? 'VIEWER',
+        suspended: (j['suspended'] as bool?) ?? false,
+      );
 
   bool get canOperate => role == 'OWNER' || role == 'ADMIN' || role == 'OPERATOR';
 }

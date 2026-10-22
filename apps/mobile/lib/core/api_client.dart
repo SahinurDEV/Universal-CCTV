@@ -16,6 +16,8 @@ class ApiException implements Exception {
         'forbidden' => 'You do not have permission to do that.',
         'not_found' => 'Not found.',
         'network' => 'Cannot reach the server. Check the address and your connection.',
+        'account_suspended' => 'This account has been suspended. Contact support.',
+        'tenant_suspended' => 'This workspace has been suspended by the platform operator.',
         'fcm_disabled' => 'Push notifications are not configured on this server.',
         _ => message ?? 'Request failed ($code).',
       };

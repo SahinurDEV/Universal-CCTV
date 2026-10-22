@@ -22,6 +22,7 @@ import { cameraMotionRouter, motionEventsRouter } from "./routes/motion.js";
 import { invitesRouter, membersRouter } from "./routes/invites.js";
 import { pushRouter } from "./routes/push.js";
 import { retentionRouter } from "./routes/retention.js";
+import { ptzRouter } from "./routes/ptz.js";
 import { workspaceRouter } from "./routes/workspace.js";
 import { platformAdminRouter } from "./routes/platform-admin.js";
 import { originCheck } from "./middleware/origin-check.js";
@@ -64,6 +65,7 @@ export function createApp() {
   // instead of camerasRouter's router-level auth plus its own.
   app.use("/cameras", liveRouter);
   app.use("/cameras", cameraMotionRouter);
+  app.use("/cameras", ptzRouter);
   app.use("/cameras", camerasRouter);
   app.use("/cameras", recordingRouter);
   app.use("/cameras", playbackRouter);

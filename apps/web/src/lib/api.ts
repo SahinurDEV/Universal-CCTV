@@ -640,6 +640,40 @@ export function setCameraRetention(cameraId: string, retentionDays: number | nul
   });
 }
 
+// --- PTZ + two-way audio ---------------------------------------------------
+export interface PtzPreset { token: string; name: string }
+export interface PtzInfo {
+  supported: boolean;
+  zoom: boolean;
+  canControl: boolean;
+  presets: PtzPreset[];
+  status: { position: { x: number; y: number; zoom: number } | null; moving: boolean } | null;
+}
+export interface AudioInfo { listen: boolean; talk: boolean; codec?: string | null; canTalk: boolean; reason?: string | null }
+
+export const getPtz = (cameraId: string) => apiFetch<PtzInfo>(`/cameras/${cameraId}/ptz`);
+export const ptzMove = (cameraId: string, v: { x?: number; y?: number; zoom?: number; timeoutMs?: number }) =>
+  apiFetch<{ ok: true }>(`/cameras/${cameraId}/ptz/move`, { method: "POST", body: JSON.stringify(v) });
+export const ptzStop = (cameraId: string) => apiFetch<{ ok: true }>(`/cameras/${cameraId}/ptz/stop`, { method: "POST", body: "{}" });
+export const ptzSetPreset = (cameraId: string, name: string) =>
+  apiFetch<PtzPreset>(`/cameras/${cameraId}/ptz/presets`, { method: "POST", body: JSON.stringify({ name }) });
+export const ptzGotoPreset = (cameraId: string, token: string) =>
+  apiFetch<{ ok: true }>(`/cameras/${cameraId}/ptz/presets/${encodeURIComponent(token)}/goto`, { method: "POST", body: "{}" });
+export const ptzRemovePreset = (cameraId: string, token: string) =>
+  apiFetch<void>(`/cameras/${cameraId}/ptz/presets/${encodeURIComponent(token)}`, { method: "DELETE" });
+export const getAudioInfo = (cameraId: string) => apiFetch<AudioInfo>(`/cameras/${cameraId}/audio`);
+export async function sendTalkClip(cameraId: string, clip: Blob): Promise<{ ok: true; seconds: number }> {
+  const res = await fetch(`${API_BASE_URL}/cameras/${cameraId}/audio/talk`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": clip.type || "audio/webm" },
+    body: clip,
+  });
+  const body = await res.json().catch(() => undefined);
+  if (!res.ok) throw new ApiError(res.status, body);
+  return body;
+}
+
 // --- Detection zones / schedules / thresholds ---------------------------------
 
 export interface DetectionZone { id: string; name: string; points: [number, number][] }

@@ -1,4 +1,5 @@
 import 'package:cctv_mobile/app.dart';
+import 'package:cctv_mobile/core/models.dart';
 import 'package:cctv_mobile/core/providers.dart';
 import 'package:cctv_mobile/core/storage.dart';
 import 'package:flutter/material.dart';
@@ -106,6 +107,31 @@ void main() {
     final calls = apis.expand((a) => a.calls).toList();
     expect(calls, contains('motion:true:any'));
     expect(calls, contains('motion:true:person'));
+  });
+
+  testWidgets('PTZ controls move, stop and go to a preset', (tester) async {
+    final (_, apis) = await pumpApp(tester, stored: {StorageKeys.serverUrl: 'https://cctv.test', StorageKeys.token: testToken});
+    await tester.tap(find.text('Lobby'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ptzControls')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ptz-right')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('preset-p1')));
+    await tester.pump();
+    final calls = apis.expand((a) => a.calls).toList();
+    expect(calls, contains('ptz:move:0.5:0.0:0.0'));
+    expect(calls, contains('ptz:stop'));
+    expect(calls, contains('ptz:goto:p1'));
+  });
+
+  testWidgets('PTZ controls are hidden for cameras without PTZ', (tester) async {
+    final (_, apis) = await pumpApp(tester, stored: {StorageKeys.serverUrl: 'https://cctv.test', StorageKeys.token: testToken});
+    for (final a in apis) {
+      a.ptzInfo = const PtzInfo(supported: false, zoom: false, canControl: true);
+    }
+    await tester.tap(find.text('Lobby'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ptzControls')), findsNothing);
   });
 
   testWidgets('workspace switcher changes the active tenant', (tester) async {

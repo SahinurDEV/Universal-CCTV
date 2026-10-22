@@ -638,3 +638,40 @@ export function setCameraRetention(cameraId: string, retentionDays: number | nul
     body: JSON.stringify({ retentionDays }),
   });
 }
+
+// --- Detection zones / schedules / thresholds ---------------------------------
+
+export interface DetectionZone { id: string; name: string; points: [number, number][] }
+export interface ScheduleWindow { days: number[]; start: string; end: string }
+export interface AlertSchedule { enabled: boolean; windows: ScheduleWindow[] }
+export interface DetectionConfig {
+  cameraId: string;
+  zones: DetectionZone[];
+  schedule: AlertSchedule | null;
+  thresholds: { person?: number; vehicle?: number };
+  defaultThreshold: number;
+  timezone: string;
+  alertsActiveNow: boolean;
+  model: { id: string; name: string; license: string; enabled: boolean };
+}
+export function getDetectionConfig(cameraId: string) {
+  return apiFetch<DetectionConfig>(`/cameras/${cameraId}/detection`);
+}
+export function setDetectionConfig(
+  cameraId: string,
+  input: { zones?: DetectionZone[]; schedule?: AlertSchedule | null; thresholds?: { person?: number; vehicle?: number } | null },
+) {
+  return apiFetch<DetectionConfig>(`/cameras/${cameraId}/detection`, { method: "PUT", body: JSON.stringify(input) });
+}
+/** Fresh JPEG from the camera as an object URL (caller revokes it). */
+export async function fetchCameraSnapshot(cameraId: string): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/cameras/${cameraId}/snapshot.jpg`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => undefined));
+  return URL.createObjectURL(await res.blob());
+}
+export function getWorkspace() {
+  return apiFetch<{ id: string; name: string; timezone: string; role: string }>("/workspace");
+}
+export function setWorkspaceTimezone(timezone: string) {
+  return apiFetch<{ timezone: string }>("/workspace/timezone", { method: "PUT", body: JSON.stringify({ timezone }) });
+}

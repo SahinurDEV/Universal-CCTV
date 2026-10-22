@@ -1,8 +1,9 @@
 import "dotenv/config";
-import { downloadModel, modelPath } from "../src/lib/detector.js";
+import { activeModel, downloadModel, modelPath } from "../src/lib/detector.js";
 
 const path = modelPath();
-console.log(`Downloading object-detection model to ${path} ...`);
+const m = activeModel();
+console.log(`Downloading ${m.name} [${m.license}] to ${path} ...`);
 downloadModel()
   .then((p) => console.log(`OK: ${p}`))
   .catch((err) => {

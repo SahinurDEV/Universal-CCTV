@@ -129,4 +129,16 @@ void main() {
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.themeMode, ThemeMode.dark);
   });
+
+  testWidgets('camera detail shows zones, schedule and thresholds', (tester) async {
+    await pumpApp(tester, stored: {StorageKeys.serverUrl: 'https://cctv.test', StorageKeys.token: testToken});
+    await tester.tap(find.text('Lobby'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Driveway'), 300);
+    expect(find.byKey(const Key('zonesOverlay')), findsOneWidget);
+    await tester.scrollUntilVisible(find.textContaining('Confidence'), 200);
+    expect(find.textContaining('Alerts on schedule (Asia/Dhaka)'), findsOneWidget);
+    expect(find.textContaining('Mon, Tue, Wed, Thu, Fri 22:00–06:00'), findsOneWidget);
+    expect(find.textContaining('people 70%, vehicles 50%'), findsOneWidget);
+  });
 }

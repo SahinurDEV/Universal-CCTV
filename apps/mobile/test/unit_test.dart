@@ -60,6 +60,22 @@ void main() {
       expect(me.activeTenant!.canOperate, isTrue);
       expect(me.tenants.first.canOperate, isFalse);
     });
+    test('DetectionConfig parses zones and schedule', () {
+      final c = DetectionConfig.fromJson({
+        'zones': [
+          {'id': 'a', 'name': 'Door', 'points': [[0.1, 0.2], [0.3, 0.2], [0.3, 0.4]]},
+        ],
+        'schedule': null,
+        'thresholds': {'vehicle': 0.8},
+        'defaultThreshold': 0.5,
+        'timezone': 'UTC',
+        'alertsActiveNow': true,
+      });
+      expect(c.zones.single.points[1], (0.3, 0.2));
+      expect(c.scheduleEnabled, isFalse);
+      expect(c.thresholdFor('vehicle'), 0.8);
+      expect(c.thresholdFor('person'), 0.5);
+    });
     test('Camera reads capability flags', () {
       final c = Camera.fromJson({
         'id': 'c', 'name': 'Cam', 'connectorType': 'ONVIF', 'host': 'h', 'motionEnabled': true,

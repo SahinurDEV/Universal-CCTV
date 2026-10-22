@@ -6,6 +6,8 @@ import {
   changePassword,
   errorMessage,
   getAccount,
+  getWorkspace,
+  setWorkspaceTimezone,
   getNotificationPreferences,
   listSessions,
   revokeOtherSessions,
@@ -41,6 +43,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-semibold">Settings</h1>
       {error && <p className="text-sm text-red-400">{error}</p>}
       {account && <ProfileCard account={account} />}
+      <WorkspaceTimezoneCard />
       <PasswordCard />
       <NotificationsCard />
       <PushCard />
@@ -216,6 +219,52 @@ function SessionsCard() {
         Sign out all other devices
       </button>
       {msg && <p className="text-sm text-slate-400">{msg}</p>}
+    </div>
+  );
+}
+
+function WorkspaceTimezoneCard() {
+  const [ws, setWs] = useState<{ timezone: string; role: string; name: string } | null>(null);
+  const [tz, setTz] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    getWorkspace()
+      .then((w) => {
+        setWs(w);
+        setTz(w.timezone);
+      })
+      .catch(() => undefined);
+  }, []);
+  if (!ws) return null;
+  const canEdit = ws.role === "OWNER" || ws.role === "ADMIN";
+  const zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [ws.timezone];
+  return (
+    <div className={card}>
+      <h2 className="font-medium">Workspace timezone</h2>
+      <p className="text-sm text-slate-400">Used for camera alert schedules in {ws.name}.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select aria-label="Workspace timezone" disabled={!canEdit} value={tz} onChange={(e) => setTz(e.target.value)} className={input}>
+          {[...new Set(["UTC", ws.timezone, ...zones])].map((z) => (
+            <option key={z} value={z}>{z}</option>
+          ))}
+        </select>
+        {canEdit && (
+          <button
+            onClick={async () => {
+              try {
+                await setWorkspaceTimezone(tz);
+                setMsg("Saved.");
+              } catch (err) {
+                setMsg(errorMessage(err, "Could not save."));
+              }
+            }}
+            className="rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white"
+          >
+            Save
+          </button>
+        )}
+        {msg && <span className="text-sm text-slate-400">{msg}</span>}
+      </div>
     </div>
   );
 }

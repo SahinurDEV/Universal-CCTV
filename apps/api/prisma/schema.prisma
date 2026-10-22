@@ -17,6 +17,8 @@ model Tenant {
   /// Workspace-wide recording retention in days. Null = fall back to the
   /// retention policy captured on each segment at ingest time.
   retentionDays Int? @map("retention_days")
+  /// IANA timezone used for alert schedules (e.g. "Asia/Dhaka").
+  timezone  String   @default("UTC")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -173,6 +175,14 @@ model Camera {
   motionEvents      MotionEvent[]
   /// Which detections raise an alert: "any" (all motion), "person", "vehicle".
   motionAlertClasses String[] @default(["any"]) @map("motion_alert_classes")
+  /// Polygons (normalised 0..1 points) — only motion/objects inside count.
+  /// Null/empty = whole frame. See lib/zones.ts.
+  detectionZones     Json?    @map("detection_zones")
+  /// Weekly windows when alerts are active, in the workspace timezone.
+  /// Null = always active. See lib/schedule.ts.
+  alertSchedule      Json?    @map("alert_schedule")
+  /// Per-class minimum confidence, e.g. {"person":0.6,"vehicle":0.5}.
+  detectionThresholds Json?   @map("detection_thresholds")
   /// Per-camera retention override in days (null = workspace setting).
   retentionDaysOverride Int? @map("retention_days_override")
 

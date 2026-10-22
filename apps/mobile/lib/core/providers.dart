@@ -170,3 +170,5 @@ final alertsProvider = FutureProvider<AlertsData>((ref) async {
 });
 
 final snapshotUrlProvider = FutureProvider.family<String, String>((ref, eventId) => requireApi(ref).snapshotUrl(eventId));
+
+final detectionConfigProvider = FutureProvider.family<DetectionConfig, String>((ref, id) => requireApi(ref).detectionConfig(id));

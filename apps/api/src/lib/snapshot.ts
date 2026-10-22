@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { loadEnv } from "../env.js";
-import { DETECTOR_INPUT_SIZE } from "./detector.js";
+import { detectorInputSize } from "./detector.js";
 
 function runFfmpeg(args: string[], input: Buffer | null, timeoutMs: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -50,8 +50,8 @@ export function captureJpeg(streamUrl: string): Promise<Buffer> {
 }
 
 /** Decodes a JPEG into the detector's square RGB24 input. */
-export function jpegToDetectorInput(jpeg: Buffer): Promise<Buffer> {
-  const n = DETECTOR_INPUT_SIZE;
+export function jpegToDetectorInput(jpeg: Buffer, size = detectorInputSize()): Promise<Buffer> {
+  const n = size;
   return runFfmpeg(
     ["-hide_banner", "-loglevel", "error", "-f", "image2pipe", "-i", "-", "-vf", `scale=${n}:${n}`, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
     jpeg,

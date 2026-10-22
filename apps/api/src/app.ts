@@ -22,6 +22,7 @@ import { cameraMotionRouter, motionEventsRouter } from "./routes/motion.js";
 import { invitesRouter, membersRouter } from "./routes/invites.js";
 import { pushRouter } from "./routes/push.js";
 import { retentionRouter } from "./routes/retention.js";
+import { workspaceRouter } from "./routes/workspace.js";
 import { originCheck } from "./middleware/origin-check.js";
 import { globalApiRateLimiter } from "./middleware/rateLimit.js";
 
@@ -73,6 +74,7 @@ export function createApp() {
   app.use("/members", membersRouter);
   app.use("/push", pushRouter);
   app.use("/retention", retentionRouter);
+  app.use("/workspace", workspaceRouter);
   app.use("/retention-policies", retentionPoliciesRouter);
   app.use("/storage", storageRouter);
   app.use("/subscription", subscriptionRouter);

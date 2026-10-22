@@ -40,6 +40,12 @@ docs/deployment.md for running this anywhere but here.
   tablet layouts. Backed by a new `POST /auth/mobile/login` bearer-token
   mode and `/push/fcm/*` endpoints. See docs/mobile-app.md.
 
+- **Detection zones, schedules, thresholds**:
+  - Polygon zones drawn on a live snapshot. Motion is masked to the zones, and objects count by where they stand.
+  - Weekly alert schedules in the workspace timezone.
+  - Per-class confidence thresholds.
+  - An optional, more accurate RT-DETR detector (Apache-2.0); SSD stays the default.
+  - See docs/detection-zones-schedules.md.
 - **People & vehicle detection**: when motion fires, a snapshot is taken and
   run through SSD MobileNet v1 (COCO, Apache-2.0) on CPU via
   onnxruntime-node; per-camera alert classes (person / vehicle / any);
@@ -305,6 +311,7 @@ and production still targets real AWS S3.
 - [docs/subscriptions-and-billing.md](docs/subscriptions-and-billing.md) — plans, the dev billing adapter, quota enforcement
 - [docs/monitoring-and-alerts.md](docs/monitoring-and-alerts.md) — camera health checks, notification types, alert-storm prevention
 - [docs/mobile-app.md](docs/mobile-app.md) — Flutter mobile app, bearer auth, FCM push setup, building APK/IPA
+- [docs/detection-zones-schedules.md](docs/detection-zones-schedules.md) — zones, alert schedules, thresholds, detector models and licenses
 - [docs/testing.md](docs/testing.md) — unit vs. integration test split, coverage, known gaps
 - [docs/security.md](docs/security.md) — auth, tenant isolation, credential handling, SSRF guard, the two real findings from the Phase 9 review
 - [docs/failure-recovery.md](docs/failure-recovery.md) — two real bugs found by actually killing Postgres/Redis/MediaMTX against a running server, both fixed and reverified

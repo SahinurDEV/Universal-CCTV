@@ -101,10 +101,12 @@ export async function recordMotion(
 export async function checkMotionForAllCameras(
   sampler: Sampler = sampleMotion,
   analyzer: Analyzer = analyzeFrame,
+  /** Restrict to these cameras (tests); default = every enabled camera. */
+  cameraIds?: string[],
 ): Promise<MotionCheckResult> {
   const env = loadEnv();
   const cameras = await prisma.camera.findMany({
-    where: { motionEnabled: true },
+    where: { motionEnabled: true, ...(cameraIds ? { id: { in: cameraIds } } : {}) },
     include: { credential: true },
   });
   const result: MotionCheckResult = { checked: 0, detected: 0, failed: 0 };

@@ -59,10 +59,10 @@ describe("alert classes", () => {
 
   it("person-only: a car is recorded but not alerted; a person raises PERSON_DETECTED with snapshot", async () => {
     await resetAlerts();
-    await checkMotionForAllCameras(motion, carFrame);
+    await checkMotionForAllCameras(motion, carFrame, [cameraId]);
     expect(await prisma.notification.count({ where: { tenantId: tenantIds[0] } })).toBe(0);
 
-    await checkMotionForAllCameras(motion, personFrame);
+    await checkMotionForAllCameras(motion, personFrame, [cameraId]);
     const alerts = await prisma.notification.findMany({ where: { tenantId: tenantIds[0] } });
     expect(alerts).toHaveLength(1);
     expect(alerts[0]).toMatchObject({ type: "PERSON_DETECTED", targetId: cameraId });
@@ -86,21 +86,21 @@ describe("alert classes", () => {
   it("vehicle class raises VEHICLE_DETECTED; empty frame with 'any' raises plain motion", async () => {
     await owner.put(`/cameras/${cameraId}/motion`).send({ enabled: true, alertClasses: ["vehicle"] });
     await resetAlerts();
-    await checkMotionForAllCameras(motion, emptyFrame);
+    await checkMotionForAllCameras(motion, emptyFrame, [cameraId]);
     expect(await prisma.notification.count({ where: { tenantId: tenantIds[0] } })).toBe(0);
-    await checkMotionForAllCameras(motion, carFrame);
+    await checkMotionForAllCameras(motion, carFrame, [cameraId]);
     expect((await prisma.notification.findFirst({ where: { tenantId: tenantIds[0] } }))?.type).toBe("VEHICLE_DETECTED");
 
     await owner.put(`/cameras/${cameraId}/motion`).send({ enabled: true, alertClasses: ["any"] });
     await resetAlerts();
-    await checkMotionForAllCameras(motion, emptyFrame);
+    await checkMotionForAllCameras(motion, emptyFrame, [cameraId]);
     expect((await prisma.notification.findFirst({ where: { tenantId: tenantIds[0] } }))?.type).toBe("MOTION_DETECTED");
   });
 
   it("falls back to a plain motion alert when the detector is unavailable, even if person-only", async () => {
     await owner.put(`/cameras/${cameraId}/motion`).send({ enabled: true, alertClasses: ["person"] });
     await resetAlerts();
-    await checkMotionForAllCameras(motion, noDetector);
+    await checkMotionForAllCameras(motion, noDetector, [cameraId]);
     const a = await prisma.notification.findFirst({ where: { tenantId: tenantIds[0] } });
     expect(a?.type).toBe("MOTION_DETECTED");
     const ev = await prisma.motionEvent.findFirst({ where: { cameraId }, orderBy: { detectedAt: "desc" } });

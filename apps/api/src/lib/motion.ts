@@ -12,12 +12,12 @@ export const MIN_SENSITIVITY = 1;
 export const MAX_SENSITIVITY = 100;
 
 /** Maps the user-facing 1..100 sensitivity to a scene-score threshold:
- * 100 → 0.005 (tiny changes trigger), 50 → ~0.05, 1 → 0.30. Logarithmic,
+ * 100 → 0.002 (tiny changes trigger), 50 → ~0.02, 1 → 0.20. Logarithmic,
  * because useful thresholds span two orders of magnitude. */
 export function sensitivityToThreshold(sensitivity: number): number {
   const s = Math.min(MAX_SENSITIVITY, Math.max(MIN_SENSITIVITY, Math.round(sensitivity)));
-  const hi = Math.log(0.3);
-  const lo = Math.log(0.005);
+  const hi = Math.log(0.2);
+  const lo = Math.log(0.002);
   const t = (s - MIN_SENSITIVITY) / (MAX_SENSITIVITY - MIN_SENSITIVITY);
   return Number(Math.exp(hi + (lo - hi) * t).toFixed(4));
 }

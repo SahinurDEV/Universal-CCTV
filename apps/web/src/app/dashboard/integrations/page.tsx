@@ -79,7 +79,7 @@ export default function IntegrationsPage() {
       )}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-medium">Webhooks</h2>
           {canManage && (
             <button onClick={() => setShowForm((v) => !v)} className="rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white">
@@ -176,7 +176,7 @@ export default function IntegrationsPage() {
           <div className="grid gap-3 md:grid-cols-2">
             {data.catalog.map((c) => (
               <div key={c.key} className="rounded-lg border border-slate-800 p-4 text-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-medium">{c.name}</p>
                   <span className={`rounded px-1.5 py-0.5 text-xs ${c.status === "planned" ? "bg-slate-800 text-slate-400" : "bg-emerald-900 text-emerald-300"}`}>
                     {STATUS_LABEL[c.status]}

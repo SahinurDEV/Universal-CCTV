@@ -109,7 +109,7 @@ export default function SubscriptionPage() {
 
       {info?.subscription && info.usage && (
         <section className="space-y-4 rounded-lg border border-slate-800 p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-lg font-medium">{info.subscription.plan.name}</p>
               <p className="text-sm text-slate-400">

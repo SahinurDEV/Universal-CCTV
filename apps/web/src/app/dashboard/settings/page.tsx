@@ -22,6 +22,7 @@ const TYPE_LABELS: Record<Notification["type"], string> = {
   STORAGE_QUOTA_WARNING: "Storage almost full",
   UPLOAD_FAILURE: "Recording upload failed",
   RETENTION_CLEANUP_FAILURE: "Old-recording cleanup failed",
+  MOTION_DETECTED: "Motion detected on a camera",
 };
 
 export default function SettingsPage() {

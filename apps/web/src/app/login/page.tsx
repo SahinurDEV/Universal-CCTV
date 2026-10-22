@@ -18,7 +18,10 @@ export default function LoginPage() {
     setError(null);
     try {
       await login({ email, password });
-      router.push("/dashboard");
+      // Only same-site relative paths (e.g. back to an invite link) — never
+      // an absolute or protocol-relative URL (open redirect).
+      const next = new URLSearchParams(window.location.search).get("next");
+      router.push(next && /^\/(?![/\\])/.test(next) ? next : "/dashboard");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError("Incorrect email or password.");

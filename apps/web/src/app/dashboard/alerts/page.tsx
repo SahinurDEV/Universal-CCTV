@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listNotifications, markAllNotificationsRead, markNotificationRead, type Notification } from "@/lib/api";
+import Link from "next/link";
+import {
+  listMotionEvents,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type MotionEvent,
+  type Notification,
+} from "@/lib/api";
 
 const TYPE_LABELS: Record<Notification["type"], string> = {
   CAMERA_OFFLINE: "Camera offline",
@@ -9,16 +17,21 @@ const TYPE_LABELS: Record<Notification["type"], string> = {
   STORAGE_QUOTA_WARNING: "Storage quota warning",
   UPLOAD_FAILURE: "Upload failure",
   RETENTION_CLEANUP_FAILURE: "Retention cleanup failure",
+  MOTION_DETECTED: "Motion detected",
 };
 
 export default function AlertsPage() {
   const [notifications, setNotifications] = useState<Notification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [motion, setMotion] = useState<MotionEvent[]>([]);
 
   async function load() {
     try {
       const res = await listNotifications();
       setNotifications(res.notifications);
+      listMotionEvents(20)
+        .then((m) => setMotion(m.events))
+        .catch(() => undefined);
     } catch {
       setError("Could not load alerts.");
     }
@@ -42,7 +55,7 @@ export default function AlertsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Alerts</h1>
         {unreadCount > 0 && (
           <button onClick={onMarkAllRead} className="text-sm text-emerald-400 hover:underline">
@@ -65,7 +78,7 @@ export default function AlertsPage() {
           {notifications.map((n) => (
             <li
               key={n.id}
-              className={`flex items-start justify-between rounded-lg border p-4 text-sm ${
+              className={`flex items-start justify-between gap-3 rounded-lg border p-4 text-sm ${
                 n.readAt ? "border-slate-800 text-slate-400" : "border-amber-800 bg-amber-950/20"
               }`}
             >
@@ -83,6 +96,26 @@ export default function AlertsPage() {
           ))}
         </ul>
       )}
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-medium">Recent motion detections</h2>
+        {motion.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            None yet. Turn on motion detection on a camera&apos;s page (Cameras → camera → Motion detection).
+          </p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {motion.map((m) => (
+              <li key={m.id} className="flex flex-wrap justify-between gap-2 rounded border border-slate-800 px-3 py-2">
+                <Link href={`/dashboard/cameras/${m.cameraId}`} className="text-emerald-400 hover:underline">
+                  {m.cameraName}
+                </Link>
+                <span className="text-slate-400">{new Date(m.detectedAt).toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <p className="text-xs text-slate-500">
         Only shows the 50 most recent alerts for this workspace. Repeated identical conditions (e.g.

@@ -7,8 +7,8 @@ import { listCameras, listLocations, type Camera, type Location } from "@/lib/ap
 
 const LAYOUTS = [
   { key: 1, label: "1", cols: "grid-cols-1" },
-  { key: 4, label: "2×2", cols: "grid-cols-1 md:grid-cols-2" },
-  { key: 9, label: "3×3", cols: "grid-cols-1 md:grid-cols-2 xl:grid-cols-3" },
+  { key: 4, label: "2×2", cols: "grid-cols-1 sm:grid-cols-2" },
+  { key: 9, label: "3×3", cols: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3" },
   { key: 16, label: "4×4", cols: "grid-cols-2 xl:grid-cols-4" },
 ] as const;
 

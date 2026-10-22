@@ -3,8 +3,8 @@ import { buildFfmpegArgs, parseSceneScores, sensitivityToThreshold } from "./mot
 
 describe("sensitivityToThreshold", () => {
   it("maps the ends of the range", () => {
-    expect(sensitivityToThreshold(1)).toBeCloseTo(0.3, 3);
-    expect(sensitivityToThreshold(100)).toBeCloseTo(0.005, 3);
+    expect(sensitivityToThreshold(1)).toBeCloseTo(0.2, 3);
+    expect(sensitivityToThreshold(100)).toBeCloseTo(0.002, 3);
   });
   it("is monotonically decreasing and clamps out-of-range input", () => {
     let prev = Infinity;

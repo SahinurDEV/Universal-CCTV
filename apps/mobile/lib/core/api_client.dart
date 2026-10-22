@@ -129,6 +129,11 @@ class ApiClient {
   Future<MotionSettings> updateMotionSettings(String id, MotionSettings s) async =>
       MotionSettings.fromJson(await _json('PUT', '/cameras/$id/motion', data: s.toJson()));
 
+  Future<DetectionConfig> detectionConfig(String id) async => DetectionConfig.fromJson(await _json('GET', '/cameras/$id/detection'));
+
+  /// URL of a fresh camera frame (fetch it with [authHeaders]).
+  String snapshotJpegUrl(String id) => resolve('/cameras/$id/snapshot.jpg');
+
   Future<List<String>> recordingDates(String id) async =>
       [for (final d in (await _json('GET', '/cameras/$id/recordings/dates'))['dates'] as List? ?? const []) d as String];
 

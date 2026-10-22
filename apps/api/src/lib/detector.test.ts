@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideAlert, parseDetections, type Detection } from "./detector.js";
+import { applyClassThresholds, decideAlert, minThreshold, parseDetections, parseRtDetr, type Detection } from "./detector.js";
 
 describe("parseDetections", () => {
   it("keeps person/vehicle classes above the score, sorted", () => {
@@ -36,5 +36,31 @@ describe("decideAlert", () => {
       type: "PERSON_DETECTED",
       summary: "Person detected (2× person, car)",
     });
+  });
+});
+
+describe("RT-DETR parsing, boxes and per-class thresholds", () => {
+  it("parses logits/boxes (cx,cy,w,h) with sigmoid scores", () => {
+    const C = 80;
+    const logits = new Float32Array(3 * C).fill(-10);
+    logits[0 * C + 0] = 3; // person ~0.95
+    logits[1 * C + 5] = 0.5; // bus ~0.62
+    logits[2 * C + 16] = 5; // dog (ignored)
+    const boxes = new Float32Array([0.5, 0.5, 0.2, 0.4, 0.3, 0.3, 0.2, 0.2, 0.5, 0.5, 0.1, 0.1]);
+    const d = parseRtDetr(logits, boxes, 3, C, 0.5);
+    expect(d.map((x) => x.label)).toEqual(["person", "bus"]);
+    expect(d[0]!.box).toEqual([0.4, 0.3, 0.2, 0.4]);
+    expect(d[0]!.score).toBeCloseTo(0.953, 2);
+  });
+  it("SSD boxes are converted to x,y,w,h", () => {
+    const d = parseDetections([1], [0.9], 1, 0.5, [0.2, 0.1, 0.6, 0.3]);
+    expect(d[0]!.box).toEqual([0.1, 0.2, 0.2, 0.4]);
+  });
+  it("applies per-class thresholds with a fallback", () => {
+    const ds: Detection[] = [person, car, { label: "truck", category: "vehicle", score: 0.55 }];
+    expect(applyClassThresholds(ds, { person: 0.95, vehicle: 0.6 }, 0.5).map((d) => d.label)).toEqual(["car"]);
+    expect(applyClassThresholds(ds, null, 0.5)).toHaveLength(3);
+    expect(minThreshold({ person: 0.7 }, 0.5)).toBe(0.5);
+    expect(minThreshold({ person: 0.7, vehicle: 0.8 }, 0.5)).toBe(0.7);
   });
 });

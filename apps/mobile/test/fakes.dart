@@ -60,6 +60,24 @@ class FakeApi extends ApiClient {
   Future<String> startLive(String id) async => throw ApiException(503, 'live_unavailable', 'no stream in tests');
 
   @override
+  Future<DetectionConfig> detectionConfig(String id) async => DetectionConfig.fromJson({
+        'zones': [
+          {'id': 'z1', 'name': 'Driveway', 'points': [[0, 0], [0.5, 0], [0.5, 1]]},
+        ],
+        'schedule': {
+          'enabled': true,
+          'windows': [
+            {'days': [1, 2, 3, 4, 5], 'start': '22:00', 'end': '06:00'},
+          ],
+        },
+        'thresholds': {'person': 0.7},
+        'defaultThreshold': 0.5,
+        'timezone': 'Asia/Dhaka',
+        'alertsActiveNow': false,
+        'model': {'name': 'SSD MobileNet v1 (COCO)'},
+      });
+
+  @override
   Future<MotionSettings> motionSettings(String id) async => motion;
 
   @override

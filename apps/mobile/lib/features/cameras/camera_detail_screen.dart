@@ -9,6 +9,7 @@ import '../../core/widgets.dart';
 import '../live/live_player.dart';
 import '../live/ptz_controls.dart';
 import 'zones_view.dart';
+import 'share_sheet.dart';
 
 class CameraDetailScreen extends ConsumerWidget {
   const CameraDetailScreen({super.key, required this.cameraId});
@@ -18,7 +19,15 @@ class CameraDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cam = ref.watch(cameraProvider(cameraId));
     return Scaffold(
-      appBar: AppBar(title: Text(cam.value?.name ?? 'Camera')),
+      appBar: AppBar(title: Text(cam.value?.name ?? 'Camera'), actions: [
+        if (ref.watch(sessionProvider).value?.me?.activeTenant?.canOperate ?? false)
+          IconButton(
+            key: const Key('shareCamera'),
+            tooltip: 'Share',
+            icon: const Icon(Icons.share),
+            onPressed: () => showShareSheet(context, cameraId),
+          ),
+      ]),
       body: AsyncView(
         value: cam,
         onRetry: () => ref.invalidate(cameraProvider(cameraId)),

@@ -134,6 +134,20 @@ void main() {
     expect(find.byKey(const Key('ptzControls')), findsNothing);
   });
 
+  testWidgets('share action creates a link with password and view limit', (tester) async {
+    final (_, apis) = await pumpApp(tester, stored: {StorageKeys.serverUrl: 'https://cctv.test', StorageKeys.token: testToken});
+    await tester.tap(find.text('Lobby'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shareCamera')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('sharePassword')), 'secret1');
+    await tester.enterText(find.byKey(const Key('shareMaxViews')), '3');
+    await tester.tap(find.byKey(const Key('shareCreate')));
+    await tester.pumpAndSettle();
+    expect(find.text('https://cctv.test/share/sl_test'), findsOneWidget);
+    expect(apis.expand((a) => a.calls), contains('share:LIVE:60:secret1:3:false'));
+  });
+
   testWidgets('workspace switcher changes the active tenant', (tester) async {
     final (_, apis) = await pumpApp(tester, stored: {StorageKeys.serverUrl: 'https://cctv.test', StorageKeys.token: testToken});
     await tester.tap(find.byKey(const Key('workspaceButton')));

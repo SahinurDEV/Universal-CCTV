@@ -6,6 +6,7 @@ import { LivePlayer } from "@/components/LivePlayer";
 import { MotionPanel } from "@/components/MotionPanel";
 import { PtzPanel } from "@/components/PtzPanel";
 import { DetectionPanel } from "@/components/DetectionPanel";
+import { SharePanel } from "@/components/SharePanel";
 import { useSession } from "@/lib/useSession";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -318,6 +319,7 @@ export default function CameraDetailPage() {
       </section>
 
       <MotionPanel cameraId={camera.id} canEdit={canEditMotion} />
+      {canEditMotion && <SharePanel cameraId={camera.id} />}
 
       <DetectionPanel cameraId={camera.id} canEdit={canEditMotion} />
 

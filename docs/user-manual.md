@@ -170,6 +170,21 @@ does not appear.
 Only Operators, Admins and Owners can move a camera or talk; Viewers just
 see the video. Every move and message is recorded in the audit log.
 
+### 5.2 Sharing a camera or a clip
+
+On a camera's page, use **Share** to make a link for someone without an
+account (a neighbour, the police, your insurer):
+
+1. Choose **Live view** or **Recording clip** (pick start and end, up to 1 hour).
+2. Choose when it expires (15 minutes to 7 days). Optionally add a password
+   and a maximum number of views.
+3. Click **Create share link** and copy the link — it is shown only once.
+
+The person opens the link in any browser, no login. They can see only that
+camera or that clip. The list under the form shows views and status; click
+**Revoke** to stop a link immediately. On the phone app, tap the share icon
+at the top of a camera's screen.
+
 ---
 
 ## 6. Recording and playback

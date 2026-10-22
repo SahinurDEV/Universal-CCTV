@@ -93,6 +93,13 @@ class FakeApi extends ApiClient {
       });
 
   @override
+  Future<String> createShareLink(String cameraId,
+      {required String kind, required int expiresInMinutes, DateTime? clipStart, DateTime? clipEnd, String? password, int? maxViews}) async {
+    calls.add('share:$kind:$expiresInMinutes:${password ?? ''}:${maxViews ?? ''}:${clipStart != null}');
+    return 'https://cctv.test/share/sl_test';
+  }
+
+  @override
   Future<MotionSettings> motionSettings(String id) async => motion;
 
   @override

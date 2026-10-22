@@ -134,6 +134,20 @@ class ApiClient {
   Future<void> ptzGotoPreset(String id, String token) =>
       _req('POST', '/cameras/$id/ptz/presets/${Uri.encodeComponent(token)}/goto', data: const <String, dynamic>{});
 
+  /// Creates a public share link; the URL (with token) is returned only once.
+  Future<String> createShareLink(String cameraId,
+      {required String kind, required int expiresInMinutes, DateTime? clipStart, DateTime? clipEnd, String? password, int? maxViews}) async {
+    final j = await _json('POST', '/cameras/$cameraId/shares', data: {
+      'kind': kind,
+      'expiresInMinutes': expiresInMinutes,
+      if (clipStart != null) 'clipStart': clipStart.toUtc().toIso8601String(),
+      if (clipEnd != null) 'clipEnd': clipEnd.toUtc().toIso8601String(),
+      if (password != null && password.isNotEmpty) 'password': password,
+      'maxViews': ?maxViews,
+    });
+    return j['url'] as String;
+  }
+
   Future<MotionSettings> motionSettings(String id) async =>
       MotionSettings.fromJson(await _json('GET', '/cameras/$id/motion'));
 

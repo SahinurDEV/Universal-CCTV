@@ -57,6 +57,10 @@ docs/deployment.md for running this anywhere but here.
   - Per-class confidence thresholds.
   - An optional, more accurate RT-DETR detector (Apache-2.0); SSD stays the default.
   - See docs/detection-zones-schedules.md.
+- **Share links**: time-limited public links to one camera's live view or a
+  recorded clip, with optional password, view limit and instant revocation.
+  HMAC-signed tokens (only a hash stored), strict scope, rate limits and audit
+  log; share action in the mobile app. See docs/share-links.md.
 
 - **People & vehicle detection**: when motion fires, a snapshot is taken and
   run through SSD MobileNet v1 (COCO, Apache-2.0) on CPU via

@@ -768,3 +768,71 @@ export function adminSetSuspended(kind: "tenants" | "users", id: string, suspend
     body: JSON.stringify(suspend ? { reason } : {}),
   });
 }
+
+// --- Share links -------------------------------------------------------------
+export interface ShareLink {
+  id: string;
+  cameraId: string;
+  cameraName?: string;
+  kind: "LIVE" | "CLIP";
+  clipStart: string | null;
+  clipEnd: string | null;
+  label: string | null;
+  hasPassword: boolean;
+  maxViews: number | null;
+  viewCount: number;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastViewedAt: string | null;
+  createdAt: string;
+  status: "active" | "expired" | "revoked" | "used_up";
+}
+export interface CreateShareInput {
+  kind: "LIVE" | "CLIP";
+  clipStart?: string;
+  clipEnd?: string;
+  expiresInMinutes: number;
+  password?: string;
+  maxViews?: number;
+  label?: string;
+}
+export const createShareLink = (cameraId: string, input: CreateShareInput) =>
+  apiFetch<ShareLink & { token: string; url: string }>(`/cameras/${cameraId}/shares`, { method: "POST", body: JSON.stringify(input) });
+export const listShareLinks = (cameraId?: string) =>
+  apiFetch<{ links: ShareLink[] }>(`/shares${cameraId ? `?cameraId=${cameraId}` : ""}`);
+export const revokeShareLink = (id: string) => apiFetch<void>(`/shares/${id}`, { method: "DELETE" });
+
+export interface OpenedShare {
+  kind: "LIVE" | "CLIP";
+  cameraName: string;
+  label: string | null;
+  clipStart: string | null;
+  clipEnd: string | null;
+  expiresAt: string;
+  viewToken: string;
+  playlistUrl: string | null;
+  clipUrl: string | null;
+}
+/** Public (no cookie sent): open a share link. */
+export async function openShare(token: string, password?: string): Promise<OpenedShare> {
+  const res = await fetch(`${API_BASE_URL}/public/share/${encodeURIComponent(token)}/open`, {
+    method: "POST",
+    credentials: "omit",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(password ? { password } : {}),
+  });
+  const body = await res.json().catch(() => undefined);
+  if (!res.ok) throw new ApiError(res.status, body);
+  return body;
+}
+export interface SharedClip {
+  clipStart: string;
+  clipEnd: string;
+  segments: { startedAt: string; durationSec: number | null; offsetSec: number; untilSec: number; url: string }[];
+}
+export async function fetchSharedClip(clipUrl: string): Promise<SharedClip> {
+  const res = await fetch(`${API_BASE_URL}${clipUrl}`, { credentials: "omit" });
+  const body = await res.json().catch(() => undefined);
+  if (!res.ok) throw new ApiError(res.status, body);
+  return body;
+}

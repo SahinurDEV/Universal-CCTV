@@ -1,5 +1,9 @@
 name: cctv-platform
 
+# Postgres, Redis and S3 are bound to 127.0.0.1 only: their dev credentials
+# are public defaults, so they must never be reachable from the LAN.
+# Validated with `docker compose config` (see docs/testing.md).
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -12,11 +16,11 @@ services:
       # Host port 5433, not 5432: this machine already has a native Postgres
       # service bound to 5432 outside Docker. Container-internal port stays
       # 5432 (only the host-side mapping changes).
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cctv}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cctv} -d ${POSTGRES_DB:-cctv}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -25,7 +29,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -46,7 +50,7 @@ services:
       SERVICES: s3
       DEFAULT_REGION: ${STORAGE_REGION:-us-east-1}
     ports:
-      - "4566:4566"
+      - "127.0.0.1:4566:4566"
     volumes:
       - localstack-data:/var/lib/localstack
     healthcheck:
@@ -105,7 +109,8 @@ services:
     image: jrottenberg/ffmpeg:6-alpine
     restart: unless-stopped
     depends_on:
-      - mediamtx
+      mediamtx:
+        condition: service_started
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >

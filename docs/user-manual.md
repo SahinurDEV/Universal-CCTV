@@ -391,6 +391,10 @@ for a compact 2-column grid. Wide tables scroll sideways.
 
 ---
 
+## 11A. "Workspace suspended" or "Account suspended"
+
+If the service operator suspends your workspace, the dashboard and the mobile app show a red banner, and cameras, live view and alerts stop working until it is restored. You can still sign in and switch to another workspace. If your account itself is suspended, you can't sign in. Contact your provider in both cases.
+
 ## 12. Security tips
 
 - Change every camera's default password.

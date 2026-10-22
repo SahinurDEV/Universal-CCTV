@@ -132,6 +132,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </Link>
             );
           })}
+          {session.session.user.isPlatformAdmin && (
+            <Link
+              href="/dashboard/admin"
+              className={`mt-4 block rounded border border-violet-800 px-3 py-2 text-sm ${
+                pathname === "/dashboard/admin" ? "bg-violet-900 text-white" : "text-violet-300 hover:bg-violet-950"
+              }`}
+            >
+              Platform admin
+            </Link>
+          )}
         </nav>
       </aside>
 
@@ -153,6 +163,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Log out
           </button>
         </header>
+        {activeTenant?.suspended && pathname !== "/dashboard/admin" && (
+          <div role="alert" className="border-b border-red-900 bg-red-950 px-4 py-3 text-sm text-red-200 md:px-6">
+            This workspace has been suspended by the platform operator. Cameras, live view and alerts are unavailable.
+            Contact support to restore access.
+          </div>
+        )}
         <main className="p-4 md:p-6">{children}</main>
       </div>
     </div>

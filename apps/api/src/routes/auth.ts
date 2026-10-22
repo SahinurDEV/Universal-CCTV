@@ -9,6 +9,7 @@ import { authRateLimiter } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { loadEnv } from "../env.js";
 import { logger } from "../lib/logger.js";
+import { isPlatformAdminUser } from "../lib/platform-admin.js";
 import { hasControlChars } from "../lib/validation.js";
 
 export const authRouter = Router();
@@ -146,6 +147,8 @@ authRouter.post("/auth/login", authRateLimiter, asyncHandler(async (req, res) =>
     logger.info({ event: "auth.login_failed" }, "failed login attempt");
     return res.status(401).json({ error: "invalid_credentials" });
   }
+  // Only revealed after a correct password, so it can't enumerate accounts.
+  if (user.suspendedAt) return res.status(403).json({ error: "account_suspended" });
 
   const firstMembership = user.memberships[0];
   const { rawToken } = await createSession(user.id, firstMembership?.tenantId ?? null);
@@ -203,6 +206,7 @@ authRouter.post("/auth/mobile/login", authRateLimiter, asyncHandler(async (req, 
     logger.info({ event: "auth.login_failed", client: "mobile" }, "failed login attempt");
     return res.status(401).json({ error: "invalid_credentials" });
   }
+  if (user.suspendedAt) return res.status(403).json({ error: "account_suspended" });
   const firstMembership = user.memberships[0];
   const { rawToken, session } = await createSession(user.id, firstMembership?.tenantId ?? null, {
     clientType: "mobile",
@@ -249,8 +253,13 @@ authRouter.get("/auth/me", requireAuth, asyncHandler(async (req, res) => {
   }
 
   res.json({
-    user: { id: user.id, email: user.email, displayName: user.displayName },
-    tenants: user.memberships.map((m) => ({ id: m.tenant.id, name: m.tenant.name, role: m.role })),
+    user: { id: user.id, email: user.email, displayName: user.displayName, isPlatformAdmin: isPlatformAdminUser(user) },
+    tenants: user.memberships.map((m) => ({
+      id: m.tenant.id,
+      name: m.tenant.name,
+      role: m.role,
+      suspended: m.tenant.suspendedAt != null,
+    })),
     activeTenantId: req.authSession!.activeTenantId,
   });
 }));

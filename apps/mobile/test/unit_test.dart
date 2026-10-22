@@ -60,6 +60,12 @@ void main() {
       expect(me.activeTenant!.canOperate, isTrue);
       expect(me.tenants.first.canOperate, isFalse);
     });
+    test('Tenant suspended flag and suspension errors', () {
+      expect(Tenant.fromJson({'id': 't', 'name': 'n', 'role': 'OWNER', 'suspended': true}).suspended, isTrue);
+      expect(Tenant.fromJson({'id': 't', 'name': 'n'}).suspended, isFalse);
+      expect(ApiException(403, 'account_suspended').friendly, contains('suspended'));
+      expect(ApiException(403, 'tenant_suspended').friendly, contains('suspended'));
+    });
     test('Camera reads capability flags', () {
       final c = Camera.fromJson({
         'id': 'c', 'name': 'Cam', 'connectorType': 'ONVIF', 'host': 'h', 'motionEnabled': true,

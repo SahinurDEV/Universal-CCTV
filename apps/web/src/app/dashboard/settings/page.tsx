@@ -1,5 +1,6 @@
 "use client";
 
+import { PushCard } from "@/components/PushCard";
 import { useEffect, useState } from "react";
 import {
   changePassword,
@@ -23,6 +24,8 @@ const TYPE_LABELS: Record<Notification["type"], string> = {
   UPLOAD_FAILURE: "Recording upload failed",
   RETENTION_CLEANUP_FAILURE: "Old-recording cleanup failed",
   MOTION_DETECTED: "Motion detected on a camera",
+  PERSON_DETECTED: "Person detected on a camera",
+  VEHICLE_DETECTED: "Vehicle detected on a camera",
 };
 
 export default function SettingsPage() {
@@ -40,6 +43,7 @@ export default function SettingsPage() {
       {account && <ProfileCard account={account} />}
       <PasswordCard />
       <NotificationsCard />
+      <PushCard />
       <SessionsCard />
     </div>
   );

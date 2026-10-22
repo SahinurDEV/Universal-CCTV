@@ -6,14 +6,23 @@ import {
   getMotionSettings,
   listCameraMotionEvents,
   setMotionSettings,
+  type AlertClass,
   type MotionEvent,
   type MotionSettings,
 } from "@/lib/api";
+import { SnapshotThumb } from "./SnapshotThumb";
+
+const CLASS_OPTIONS: { key: AlertClass; label: string }[] = [
+  { key: "person", label: "People" },
+  { key: "vehicle", label: "Vehicles" },
+  { key: "any", label: "Any motion" },
+];
 
 /** Motion-detection toggle, sensitivity slider and recent detections for one camera. */
 export function MotionPanel({ cameraId, canEdit }: { cameraId: string; canEdit: boolean }) {
   const [settings, setSettings] = useState<MotionSettings | null>(null);
   const [sensitivity, setSensitivity] = useState(50);
+  const [classes, setClasses] = useState<AlertClass[]>(["any"]);
   const [events, setEvents] = useState<MotionEvent[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +38,7 @@ export function MotionPanel({ cameraId, canEdit }: { cameraId: string; canEdit: 
         setSettings(s);
         if (!sliderInitialized.current) {
           setSensitivity(s.sensitivity);
+          setClasses(s.alertClasses);
           sliderInitialized.current = true;
         }
         setEvents(e.events);
@@ -48,7 +58,7 @@ export function MotionPanel({ cameraId, canEdit }: { cameraId: string; canEdit: 
     setBusy(true);
     setError(null);
     try {
-      setSettings(await setMotionSettings(cameraId, { enabled, sensitivity }));
+      setSettings(await setMotionSettings(cameraId, { enabled, sensitivity, alertClasses: classes }));
     } catch (err) {
       setError(errorMessage(err, "Could not save motion settings."));
     } finally {
@@ -93,13 +103,38 @@ export function MotionPanel({ cameraId, canEdit }: { cameraId: string; canEdit: 
               className="mt-1 w-full"
             />
           </label>
-          {canEdit && sensitivity !== settings.sensitivity && (
-            <button onClick={() => save(settings.enabled)} disabled={busy} className="text-emerald-400 hover:underline">
-              Save sensitivity
-            </button>
-          )}
+          <fieldset>
+            <legend className="text-slate-400">Alert me about</legend>
+            <div className="mt-1 flex flex-wrap gap-4">
+              {CLASS_OPTIONS.map((o) => (
+                <label key={o.key} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    disabled={!canEdit}
+                    checked={classes.includes(o.key)}
+                    onChange={(e) =>
+                      setClasses((prev) => (e.target.checked ? [...prev, o.key] : prev.filter((c) => c !== o.key)))
+                    }
+                  />
+                  {o.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {canEdit &&
+            (sensitivity !== settings.sensitivity ||
+              [...classes].sort().join() !== [...settings.alertClasses].sort().join()) && (
+              <button
+                onClick={() => save(settings.enabled)}
+                disabled={busy || classes.length === 0}
+                className="text-emerald-400 hover:underline disabled:opacity-50"
+              >
+                {classes.length === 0 ? "Pick at least one" : "Save changes"}
+              </button>
+            )}
           <p className="text-xs text-slate-500">
-            Higher sensitivity catches smaller movements but may alert on light changes or rain. You get at most one
+            Higher sensitivity catches smaller movements but may alert on light changes or rain. People/vehicle
+            detection runs on the server; if it isn&apos;t available you still get plain motion alerts. You get at most one
             &quot;Motion detected&quot; alert every few minutes per camera; every detection is listed below.
             {settings.lastCheckedAt && <> Last checked {new Date(settings.lastCheckedAt).toLocaleString()}.</>}
           </p>
@@ -111,11 +146,20 @@ export function MotionPanel({ cameraId, canEdit }: { cameraId: string; canEdit: 
             {events.length === 0 ? (
               <p className="text-xs text-slate-500">No motion detected yet.</p>
             ) : (
-              <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
+              <ul className="max-h-72 space-y-1 overflow-y-auto text-xs">
                 {events.map((e) => (
-                  <li key={e.id} className="flex justify-between gap-2 rounded border border-slate-800 px-2 py-1">
-                    <span>{new Date(e.detectedAt).toLocaleString()}</span>
-                    <span className="text-slate-500">score {e.score.toFixed(3)}</span>
+                  <li key={e.id} className="flex items-center gap-2 rounded border border-slate-800 px-2 py-1">
+                    {e.hasSnapshot && <SnapshotThumb eventId={e.id} className="h-10 w-16" />}
+                    <div className="min-w-0 flex-1">
+                      <p>{new Date(e.detectedAt).toLocaleString()}</p>
+                      <p className="text-slate-500">
+                        {e.labels === null
+                          ? "motion (detector unavailable)"
+                          : e.labels.length
+                            ? e.labels.map((l) => `${l.label} ${Math.round(l.score * 100)}%`).join(", ")
+                            : "motion, no person/vehicle"}
+                      </p>
+                    </div>
                   </li>
                 ))}
               </ul>

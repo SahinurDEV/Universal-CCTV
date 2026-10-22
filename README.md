@@ -29,6 +29,18 @@ docs/deployment.md for running this anywhere but here.
 
 ## What's implemented so far
 
+- **Motion-detection alerts**: per-camera on/off + sensitivity; a worker
+  samples each enabled camera through MediaMTX with ffmpeg's scene-change
+  filter, stores every detection, and raises a rate-limited
+  `MOTION_DETECTED` alert (in-app + webhooks, respects alert preferences).
+- **Team & invites**: invite by email with a role, single-use hashed token
+  links with expiry, accept page (new or existing account), revoke, role
+  changes and removal with owner/admin rules, workspace switcher. Email is
+  sent via SMTP when `SMTP_URL` is set; otherwise the link is shown once to
+  the inviter.
+- **Mobile-friendly dashboard**: collapsible menu, responsive grids/forms,
+  scrollable tables.
+
 - **Live View**: multi-camera grid (1 / 2×2 / 3×3 / 4×4, location filter,
   paging) playing live HLS from MediaMTX through an authenticated API proxy —
   every playlist/segment request re-checks the session and tenant, MediaMTX

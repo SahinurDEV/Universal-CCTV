@@ -140,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button
             type="button"
             onClick={() => setNavOpen((o) => !o)}
-            className="rounded border border-slate-700 px-2 py-1 text-sm text-slate-300 md:hidden"
+            className="whitespace-nowrap rounded border border-slate-700 px-2 py-1 text-sm text-slate-300 md:hidden"
             aria-controls="dashboard-nav"
             aria-expanded={navOpen}
             aria-label="Toggle navigation menu"

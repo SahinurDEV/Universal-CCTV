@@ -16,6 +16,8 @@ class ApiException implements Exception {
         'forbidden' => 'You do not have permission to do that.',
         'not_found' => 'Not found.',
         'network' => 'Cannot reach the server. Check the address and your connection.',
+        'account_suspended' => 'This account has been suspended. Contact support.',
+        'tenant_suspended' => 'This workspace has been suspended by the platform operator.',
         'fcm_disabled' => 'Push notifications are not configured on this server.',
         _ => message ?? 'Request failed ($code).',
       };
@@ -137,6 +139,11 @@ class ApiClient {
 
   Future<MotionSettings> updateMotionSettings(String id, MotionSettings s) async =>
       MotionSettings.fromJson(await _json('PUT', '/cameras/$id/motion', data: s.toJson()));
+
+  Future<DetectionConfig> detectionConfig(String id) async => DetectionConfig.fromJson(await _json('GET', '/cameras/$id/detection'));
+
+  /// URL of a fresh camera frame (fetch it with [authHeaders]).
+  String snapshotJpegUrl(String id) => resolve('/cameras/$id/snapshot.jpg');
 
   Future<List<String>> recordingDates(String id) async =>
       [for (final d in (await _json('GET', '/cameras/$id/recordings/dates'))['dates'] as List? ?? const []) d as String];

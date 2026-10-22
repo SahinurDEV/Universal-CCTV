@@ -39,24 +39,34 @@ export interface MotionSampleResult {
 
 export class MotionSampleError extends Error {}
 
-/** ffmpeg argument list (no shell is involved, so the URL can't inject). */
-export function buildFfmpegArgs(rtspUrl: string, seconds: number): string[] {
-  return [
-    "-hide_banner", "-nostdin", "-loglevel", "error",
-    "-rtsp_transport", "tcp",
-    "-t", String(seconds),
-    "-i", rtspUrl,
-    "-an",
-    "-vf", "fps=4,scale=320:-2,select='gte(scene\\,0)',metadata=print:file=-",
-    "-f", "null", "-",
-  ];
+export interface MotionSampleOptions {
+  /** Path to a 320x180 PGM mask (white = detection zone). */
+  maskPath?: string;
+}
+
+/** ffmpeg argument list (no shell is involved, so the URL can't inject).
+ * With a mask, frames are scaled to the mask size and multiplied by it, so
+ * changes outside the zones contribute nothing to the scene score. */
+export function buildFfmpegArgs(rtspUrl: string, seconds: number, opts: MotionSampleOptions = {}): string[] {
+  const head = ["-hide_banner", "-nostdin", "-loglevel", "error", "-rtsp_transport", "tcp", "-t", String(seconds), "-i", rtspUrl];
+  if (opts.maskPath) {
+    return [
+      ...head,
+      "-i", opts.maskPath,
+      "-an",
+      "-filter_complex",
+      "[0:v]fps=4,scale=320:180,format=gray[v];[1:v]scale=320:180,format=gray[m];[v][m]blend=all_mode=multiply,select='gte(scene\\,0)',metadata=print:file=-",
+      "-f", "null", "-",
+    ];
+  }
+  return [...head, "-an", "-vf", "fps=4,scale=320:-2,select='gte(scene\\,0)',metadata=print:file=-", "-f", "null", "-"];
 }
 
 /** Samples `seconds` of video from `rtspUrl` and returns the peak scene score. */
-export function sampleMotion(rtspUrl: string, seconds: number): Promise<MotionSampleResult> {
+export function sampleMotion(rtspUrl: string, seconds: number, opts: MotionSampleOptions = {}): Promise<MotionSampleResult> {
   const env = loadEnv();
   return new Promise((resolve, reject) => {
-    const child = spawn(env.FFMPEG_PATH, buildFfmpegArgs(rtspUrl, seconds), { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(env.FFMPEG_PATH, buildFfmpegArgs(rtspUrl, seconds, opts), { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     const killTimer = setTimeout(() => child.kill("SIGKILL"), (seconds + 15) * 1000);

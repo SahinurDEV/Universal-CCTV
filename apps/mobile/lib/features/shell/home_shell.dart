@@ -30,6 +30,19 @@ class HomeShell extends ConsumerWidget {
     }
 
     void go(int i) => context.go(_destinations[i].path);
+    final suspended = ref.watch(sessionProvider).value?.me?.activeTenant?.suspended ?? false;
+    final body = suspended
+        ? Column(children: [
+            MaterialBanner(
+              key: const Key('suspendedBanner'),
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
+              leading: const Icon(Icons.block),
+              content: const Text('This workspace has been suspended by the platform operator. Contact support.'),
+              actions: [TextButton(onPressed: () => showWorkspaceSwitcher(context, ref), child: const Text('Switch'))],
+            ),
+            Expanded(child: child),
+          ])
+        : child;
 
     if (context.isWide) {
       return Scaffold(
@@ -45,12 +58,12 @@ class HomeShell extends ConsumerWidget {
             ],
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: child),
+          Expanded(child: body),
         ]),
       );
     }
     return Scaffold(
-      body: child,
+      body: body,
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: go,

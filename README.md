@@ -31,6 +31,11 @@ docs/deployment.md for running this anywhere but here.
 
 ## What's implemented so far
 
+- **Platform admin dashboard**: a super-admin role, separate from workspace
+  roles and granted only by CLI or env. It lists all workspaces, users and
+  cameras with usage stats, can suspend or unsuspend workspaces and users,
+  and audit-logs every action. See docs/platform-admin.md.
+
 - **Mobile app (Flutter, Android + iOS)** in `apps/mobile`: configurable
   server URL, sign-in with a bearer token kept in the Keychain / Android
   Keystore, workspace switcher, locations and cameras with recording status,
@@ -45,6 +50,13 @@ docs/deployment.md for running this anywhere but here.
   the ONVIF RTSP audio backchannel (G.711, web only), Operator+ only,
   rate-limited and audit-logged. Tested against bundled ONVIF/RTSP
   simulators; limits are listed honestly in docs/ptz-audio.md.
+
+- **Detection zones, schedules, thresholds**:
+  - Polygon zones drawn on a live snapshot. Motion is masked to the zones, and objects count by where they stand.
+  - Weekly alert schedules in the workspace timezone.
+  - Per-class confidence thresholds.
+  - An optional, more accurate RT-DETR detector (Apache-2.0); SSD stays the default.
+  - See docs/detection-zones-schedules.md.
 
 - **People & vehicle detection**: when motion fires, a snapshot is taken and
   run through SSD MobileNet v1 (COCO, Apache-2.0) on CPU via
@@ -310,7 +322,9 @@ and production still targets real AWS S3.
 - [docs/retention-and-storage.md](docs/retention-and-storage.md) — retention policies, enforcement/reconciliation, storage accounting
 - [docs/subscriptions-and-billing.md](docs/subscriptions-and-billing.md) — plans, the dev billing adapter, quota enforcement
 - [docs/monitoring-and-alerts.md](docs/monitoring-and-alerts.md) — camera health checks, notification types, alert-storm prevention
+- [docs/platform-admin.md](docs/platform-admin.md) — platform super-admin role, suspension, admin audit log
 - [docs/mobile-app.md](docs/mobile-app.md) — Flutter mobile app, bearer auth, FCM push setup, building APK/IPA
+- [docs/detection-zones-schedules.md](docs/detection-zones-schedules.md) — zones, alert schedules, thresholds, detector models and licenses
 - [docs/testing.md](docs/testing.md) — unit vs. integration test split, coverage, known gaps
 - [docs/security.md](docs/security.md) — auth, tenant isolation, credential handling, SSRF guard, the two real findings from the Phase 9 review
 - [docs/failure-recovery.md](docs/failure-recovery.md) — two real bugs found by actually killing Postgres/Redis/MediaMTX against a running server, both fixed and reverified

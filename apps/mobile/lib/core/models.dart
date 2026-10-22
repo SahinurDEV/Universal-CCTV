@@ -14,13 +14,18 @@ class User {
 }
 
 class Tenant {
-  const Tenant({required this.id, required this.name, required this.role});
+  const Tenant({required this.id, required this.name, required this.role, this.suspended = false});
   final String id;
   final String name;
   final String role;
+  final bool suspended;
 
-  factory Tenant.fromJson(Map<String, dynamic> j) =>
-      Tenant(id: j['id'] as String, name: j['name'] as String, role: (j['role'] as String?) ?? 'VIEWER');
+  factory Tenant.fromJson(Map<String, dynamic> j) => Tenant(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        role: (j['role'] as String?) ?? 'VIEWER',
+        suspended: (j['suspended'] as bool?) ?? false,
+      );
 
   bool get canOperate => role == 'OWNER' || role == 'ADMIN' || role == 'OPERATOR';
 }
@@ -262,4 +267,74 @@ class PtzInfo {
         canControl: j['canControl'] as bool? ?? false,
         presets: [for (final p in (j['presets'] as List? ?? const [])) PtzPreset.fromJson(p as Map<String, dynamic>)],
       );
+}
+
+class DetectionZone {
+  const DetectionZone({required this.id, required this.name, required this.points});
+  final String id;
+  final String name;
+  final List<(double, double)> points;
+
+  factory DetectionZone.fromJson(Map<String, dynamic> j) => DetectionZone(
+        id: j['id'] as String,
+        name: (j['name'] as String?) ?? '',
+        points: [
+          for (final p in (j['points'] as List? ?? const []))
+            (((p as List)[0] as num).toDouble(), (p[1] as num).toDouble())
+        ],
+      );
+}
+
+class ScheduleWindow {
+  const ScheduleWindow({required this.days, required this.start, required this.end});
+  final List<int> days;
+  final String start;
+  final String end;
+
+  factory ScheduleWindow.fromJson(Map<String, dynamic> j) => ScheduleWindow(
+        days: [for (final d in (j['days'] as List? ?? const [])) (d as num).toInt()],
+        start: (j['start'] as String?) ?? '00:00',
+        end: (j['end'] as String?) ?? '00:00',
+      );
+
+  static const _names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  String get label => '${days.map((d) => _names[d % 7]).join(', ')} $start–$end';
+}
+
+class DetectionConfig {
+  const DetectionConfig({
+    required this.zones,
+    required this.timezone,
+    required this.alertsActiveNow,
+    this.scheduleEnabled = false,
+    this.windows = const [],
+    this.thresholds = const {},
+    this.defaultThreshold = 0.5,
+    this.modelName = '',
+  });
+  final List<DetectionZone> zones;
+  final String timezone;
+  final bool alertsActiveNow;
+  final bool scheduleEnabled;
+  final List<ScheduleWindow> windows;
+  final Map<String, double> thresholds;
+  final double defaultThreshold;
+  final String modelName;
+
+  double thresholdFor(String c) => thresholds[c] ?? defaultThreshold;
+
+  factory DetectionConfig.fromJson(Map<String, dynamic> j) {
+    final sched = j['schedule'] as Map<String, dynamic>?;
+    final t = (j['thresholds'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return DetectionConfig(
+      zones: [for (final z in (j['zones'] as List? ?? const [])) DetectionZone.fromJson(z as Map<String, dynamic>)],
+      timezone: (j['timezone'] as String?) ?? 'UTC',
+      alertsActiveNow: (j['alertsActiveNow'] as bool?) ?? true,
+      scheduleEnabled: (sched?['enabled'] as bool?) ?? false,
+      windows: [for (final w in (sched?['windows'] as List? ?? const [])) ScheduleWindow.fromJson(w as Map<String, dynamic>)],
+      thresholds: {for (final e in t.entries) e.key: (e.value as num).toDouble()},
+      defaultThreshold: (j['defaultThreshold'] as num?)?.toDouble() ?? 0.5,
+      modelName: ((j['model'] as Map?)?['name'] as String?) ?? '',
+    );
+  }
 }

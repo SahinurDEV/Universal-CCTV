@@ -11,9 +11,10 @@ const testToken = 'ababababababababababababababababababababababababababababababa
 
 /// In-memory API used by widget tests; records calls.
 class FakeApi extends ApiClient {
-  FakeApi({super.token, this.validPassword = 'secret'}) : super(baseUrl: 'https://cctv.test');
+  FakeApi({super.token, this.validPassword = 'secret', this.suspended = false}) : super(baseUrl: 'https://cctv.test');
 
   final String validPassword;
+  final bool suspended;
   final calls = <String>[];
   MotionSettings motion = const MotionSettings(enabled: false, sensitivity: 50, alertClasses: ['any']);
 
@@ -33,7 +34,8 @@ class FakeApi extends ApiClient {
   @override
   Future<Me> me() async {
     if (token == null) throw ApiException(401, 'unauthorized');
-    return testMe;
+    if (!suspended) return testMe;
+    return Me(user: testMe.user, tenants: const [Tenant(id: 't1', name: 'Acme HQ', role: 'OWNER', suspended: true)], activeTenantId: 't1');
   }
 
   @override
@@ -71,6 +73,24 @@ class FakeApi extends ApiClient {
 
   @override
   Future<void> ptzGotoPreset(String id, String token) async => calls.add('ptz:goto:$token');
+
+  @override
+  Future<DetectionConfig> detectionConfig(String id) async => DetectionConfig.fromJson({
+        'zones': [
+          {'id': 'z1', 'name': 'Driveway', 'points': [[0, 0], [0.5, 0], [0.5, 1]]},
+        ],
+        'schedule': {
+          'enabled': true,
+          'windows': [
+            {'days': [1, 2, 3, 4, 5], 'start': '22:00', 'end': '06:00'},
+          ],
+        },
+        'thresholds': {'person': 0.7},
+        'defaultThreshold': 0.5,
+        'timezone': 'Asia/Dhaka',
+        'alertsActiveNow': false,
+        'model': {'name': 'SSD MobileNet v1 (COCO)'},
+      });
 
   @override
   Future<MotionSettings> motionSettings(String id) async => motion;

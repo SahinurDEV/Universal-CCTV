@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../live/live_player.dart';
 import '../live/ptz_controls.dart';
+import 'zones_view.dart';
 
 class CameraDetailScreen extends ConsumerWidget {
   const CameraDetailScreen({super.key, required this.cameraId});
@@ -174,6 +175,7 @@ class _CameraInfoState extends ConsumerState<_CameraInfo> {
         if (m.lastError != null)
           ListTile(leading: const Icon(Icons.warning_amber), title: Text(m.lastError!, style: const TextStyle(fontSize: 13))),
       ],
+      DetectionSummary(cameraId: c.id),
       const SizedBox(height: 24),
     ]);
   }

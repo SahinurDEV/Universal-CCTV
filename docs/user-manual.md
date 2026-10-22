@@ -252,6 +252,29 @@ If the AI model isn't available on the server, you still get plain
 silently missed. The detector can miss people who are very small, far away,
 or in the dark.
 
+### Zones, schedules and confidence
+
+On the camera page, under **Detection zones** (operators and above):
+
+1. A fresh snapshot from the camera is shown. Click around the area you
+   care about, such as the driveway or the doorstep, then click **Finish zone**.
+   You can draw up to 8 zones and rename them. **Remove** deletes one.
+2. Only movement inside a zone triggers motion, and a person or vehicle only
+   counts if the bottom of it (where they stand) is inside a zone. Cars
+   passing on the street outside your zone are ignored.
+3. **Alert schedule**: tick *Only alert during these times* and add time
+   windows, for example Mon–Fri 22:00–06:00. A window that ends earlier than
+   it starts runs overnight. Times use the **workspace timezone**, which you
+   set in **Settings → Workspace timezone** (owners and admins). Outside the
+   schedule, detections are still saved with snapshots, but no alert or push
+   is sent.
+4. **Confidence thresholds**: raise *Person* or *Vehicle* to cut false
+   alarms, lower them to catch more.
+5. Click **Save detection settings**.
+
+The mobile app shows the zones on the camera page along with the schedule
+and thresholds. Draw and edit zones in the web dashboard.
+
 ---
 
 ## 7C. Push notifications on your phone
@@ -408,6 +431,10 @@ for a compact 2-column grid. Wide tables scroll sideways.
   devices** if you lost a phone or used a shared computer.
 
 ---
+
+## 11A. "Workspace suspended" or "Account suspended"
+
+If the service operator suspends your workspace, the dashboard and the mobile app show a red banner, and cameras, live view and alerts stop working until it is restored. You can still sign in and switch to another workspace. If your account itself is suspended, you can't sign in. Contact your provider in both cases.
 
 ## 12. Security tips
 

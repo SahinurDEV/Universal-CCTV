@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LivePlayer } from "@/components/LivePlayer";
 import { MotionPanel } from "@/components/MotionPanel";
 import { PtzPanel } from "@/components/PtzPanel";
+import { DetectionPanel } from "@/components/DetectionPanel";
 import { useSession } from "@/lib/useSession";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -317,6 +318,8 @@ export default function CameraDetailPage() {
       </section>
 
       <MotionPanel cameraId={camera.id} canEdit={canEditMotion} />
+
+      <DetectionPanel cameraId={camera.id} canEdit={canEditMotion} />
 
       <section className="rounded-lg border border-slate-800 p-4">
         <h2 className="mb-3 text-sm font-medium text-slate-400">Capabilities</h2>

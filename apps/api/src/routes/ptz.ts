@@ -45,6 +45,15 @@ export const ptzRateLimiter = rateLimit({
   keyGenerator: userKey,
   message: { error: "too_many_requests" },
 });
+/** Reads also dial the camera (ONVIF / RTSP DESCRIBE), so they are limited too. */
+export const ptzReadRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: "too_many_requests" },
+});
 export const talkRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 20,
@@ -113,7 +122,7 @@ function audit(req: Request, cameraId: string, action: string, metadata: Record<
   });
 }
 
-ptzRouter.get("/:id/ptz", ...auth, asyncHandler(async (req, res) => {
+ptzRouter.get("/:id/ptz", ...auth, ptzReadRateLimiter, asyncHandler(async (req, res) => {
   const camera = await loadCamera(req);
   if (!camera) return res.status(404).json({ error: "not_found" });
   const canControl = ["OWNER", "ADMIN", "OPERATOR"].includes(req.authTenant!.role);
@@ -222,7 +231,7 @@ async function rtspUrlFor(camera: CamWithCreds): Promise<string> {
   return buildRtspUrl(camera.host, camera.port, creds(camera));
 }
 
-ptzRouter.get("/:id/audio", ...auth, asyncHandler(async (req, res) => {
+ptzRouter.get("/:id/audio", ...auth, ptzReadRateLimiter, asyncHandler(async (req, res) => {
   const camera = await loadCamera(req);
   if (!camera) return res.status(404).json({ error: "not_found" });
   const canTalk = ["OWNER", "ADMIN", "OPERATOR"].includes(req.authTenant!.role);

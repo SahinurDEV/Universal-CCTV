@@ -172,3 +172,4 @@ final alertsProvider = FutureProvider<AlertsData>((ref) async {
 final snapshotUrlProvider = FutureProvider.family<String, String>((ref, eventId) => requireApi(ref).snapshotUrl(eventId));
 
 final ptzProvider = FutureProvider.autoDispose.family<PtzInfo, String>((ref, id) => requireApi(ref).ptz(id));
+final detectionConfigProvider = FutureProvider.family<DetectionConfig, String>((ref, id) => requireApi(ref).detectionConfig(id));
